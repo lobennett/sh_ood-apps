@@ -1,0 +1,11 @@
+---
+name: Cursor IDE
+category: Interactive Apps
+subcategory: IDE
+role: batch_connect
+description: |
+  This app will launch a [Cursor] IDE tunnel on [Sherlock].
+  Connect from your local Cursor desktop client via Remote Tunnels.
+
+  [Cursor]: https://www.cursor.com/
+  [Sherlock]: https://www.sherlock.stanford.edu/

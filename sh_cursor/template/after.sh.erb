@@ -1,0 +1,12 @@
+# Wait for tunnel readiness signal
+echo "$(date): Waiting for Cursor tunnel to become ready on port ${port}..."
+
+if wait_until_port_used "${host}:${port}" 180; then
+  echo "$(date): Cursor tunnel is ready!"
+else
+  echo "$(date): Timed out waiting for Cursor tunnel readiness signal."
+  echo "$(date): The tunnel may still be starting -- check the session log."
+  # Do NOT clean_up here; the tunnel might still be initializing
+fi
+
+sleep 2

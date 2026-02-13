@@ -1,0 +1,22 @@
+cluster: "sherlock"
+
+form:
+  - cursor_tunnel_name
+<%- IO.foreach(File.expand_path(File.dirname(__FILE__))+"/../_common/form/form.yml") do |line| %>
+  <%= line %>
+<%- end -%>
+
+attributes:
+  cursor_tunnel_name:
+    label: "Tunnel name"
+    required: true
+    value: "sherlock"
+    help: |
+      <small>
+      Name for the Cursor tunnel. You'll use this to connect from your local
+      Cursor client via <code>Remote Tunnels: Connect to Tunnel</code>.
+      </small>
+
+<%- IO.foreach(File.expand_path(File.dirname(__FILE__))+"/../_common/form/attributes.yml") do |line| %>
+  <%= line %>
+<%- end -%>

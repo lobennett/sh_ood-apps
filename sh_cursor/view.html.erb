@@ -1,0 +1,92 @@
+<%
+  tunnel_name = context.cursor_tunnel_name
+%>
+
+<div class="panel panel-default">
+  <div class="panel-heading">
+    <h3 class="panel-title"><i class="fa fa-terminal"></i> Cursor Remote Tunnel</h3>
+  </div>
+  <div class="panel-body">
+    <p>
+      Your Cursor tunnel is running on <strong><%= host %></strong> with tunnel name:
+    </p>
+    <div class="input-group" style="max-width: 400px; margin-bottom: 15px;">
+      <input type="text" class="form-control" id="tunnel-name" value="<%= tunnel_name %>" readonly>
+      <span class="input-group-btn">
+        <button class="btn btn-default" type="button" onclick="copyTunnelName()">
+          <i class="fa fa-clipboard"></i> Copy
+        </button>
+      </span>
+    </div>
+
+    <h4>How to connect:</h4>
+    <ol>
+      <li>Open <strong>Cursor</strong> on your local machine</li>
+      <li>Install the <strong>Remote - Tunnels</strong> extension (if not already installed)</li>
+      <li>Open the Command Palette (<code>Cmd+Shift+P</code> / <code>Ctrl+Shift+P</code>)</li>
+      <li>Run <code>Remote Tunnels: Connect to Tunnel...</code></li>
+      <li>Sign in with <strong>Microsoft</strong> when prompted</li>
+      <li>Select tunnel: <strong><%= tunnel_name %></strong></li>
+    </ol>
+  </div>
+</div>
+
+<div class="panel panel-default">
+  <div class="panel-heading">
+    <h3 class="panel-title"><i class="fa fa-server"></i> Direct SSH Access</h3>
+  </div>
+  <div class="panel-body">
+    <p>You can also SSH directly to the compute node:</p>
+    <div class="input-group" style="max-width: 500px;">
+      <input type="text" class="form-control" id="ssh-command" value="ssh <%= host %>" readonly>
+      <span class="input-group-btn">
+        <button class="btn btn-default" type="button" onclick="copySshCommand()">
+          <i class="fa fa-clipboard"></i> Copy
+        </button>
+      </span>
+    </div>
+  </div>
+</div>
+
+<div class="panel panel-default">
+  <div class="panel-heading">
+    <h3 class="panel-title"><i class="fa fa-wrench"></i> Troubleshooting</h3>
+  </div>
+  <div class="panel-body">
+    <dl>
+      <dt>Tunnel not appearing in Cursor?</dt>
+      <dd>
+        Make sure you're signed in to the same Microsoft account on both
+        the tunnel and your local Cursor client.
+      </dd>
+
+      <dt>Authentication expired?</dt>
+      <dd>
+        SSH to Sherlock and re-authenticate:
+        <pre>~/.cursor-tunnel/cursor tunnel user login --provider microsoft</pre>
+        Then restart this OOD session.
+      </dd>
+
+      <dt>First time setup?</dt>
+      <dd>
+        Run the setup script on a Sherlock login node:
+        <pre>bash ~/ondemand/dev/sh_cursor/setup.sh</pre>
+        This will install dependencies and authenticate your account.
+      </dd>
+    </dl>
+  </div>
+</div>
+
+<script type="text/javascript">
+function copyTunnelName() {
+  var el = document.getElementById('tunnel-name');
+  el.select();
+  document.execCommand('copy');
+}
+
+function copySshCommand() {
+  var el = document.getElementById('ssh-command');
+  el.select();
+  document.execCommand('copy');
+}
+</script>

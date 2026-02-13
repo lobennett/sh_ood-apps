@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# --- Module setup ---
+module reset
+module load system git
+<%- unless context.sh_modules.blank? -%>
+module load <%= context.sh_modules %>
+<%- end -%>
+
+# --- Paths ---
+CURSOR_CLI_DIR="$HOME/.cursor-tunnel"
+CURSOR_CLI="$CURSOR_CLI_DIR/cursor"
+CURSOR_DEPS="$SCRATCH/.cursor-deps"
+CURSOR_LOG="$PWD/cursor-tunnel.log"
+MARKER_FILE="$PWD/cursor-tunnel-ready"
+
+# --- 1. Install Cursor CLI if missing ---
+if [[ ! -x "$CURSOR_CLI" ]]; then
+  echo "$(date): Installing Cursor CLI..."
+  mkdir -p "$CURSOR_CLI_DIR"
+  curl -fsSL "https://api2.cursor.sh/updates/download-latest?os=cli-alpine-x64" \
+    -o "$CURSOR_CLI_DIR/cursor.tar.gz"
+  tar xzf "$CURSOR_CLI_DIR/cursor.tar.gz" -C "$CURSOR_CLI_DIR" --strip-components=1
+  rm -f "$CURSOR_CLI_DIR/cursor.tar.gz"
+  chmod +x "$CURSOR_CLI"
+  echo "$(date): Cursor CLI installed at $CURSOR_CLI"
+else
+  echo "$(date): Cursor CLI already installed at $CURSOR_CLI"
+fi
+
+# --- 2. Install patchelf + glibc 2.28 sysroot if missing ---
+PATCHELF="$CURSOR_DEPS/bin/patchelf"
+SYSROOT="$CURSOR_DEPS/sysroot"
+
+if [[ ! -x "$PATCHELF" ]]; then
+  echo "$(date): Installing patchelf 0.18.0..."
+  mkdir -p "$CURSOR_DEPS/bin"
+  curl -fsSL "https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-x86_64.tar.gz" \
+    -o "$CURSOR_DEPS/patchelf.tar.gz"
+  tar xzf "$CURSOR_DEPS/patchelf.tar.gz" -C "$CURSOR_DEPS" --strip-components=1 bin/patchelf
+  rm -f "$CURSOR_DEPS/patchelf.tar.gz"
+  echo "$(date): patchelf installed at $PATCHELF"
+else
+  echo "$(date): patchelf already installed at $PATCHELF"
+fi
+
+if [[ ! -d "$SYSROOT/lib/x86_64-linux-gnu" ]]; then
+  echo "$(date): Installing glibc 2.28 sysroot from Debian buster..."
+  mkdir -p "$SYSROOT"
+  TMPDIR_DEB=$(mktemp -d)
+  curl -fsSL "https://deb.debian.org/debian/pool/main/g/glibc/libc6_2.28-10+deb10u4_amd64.deb" \
+    -o "$TMPDIR_DEB/libc6.deb"
+  cd "$TMPDIR_DEB"
+  ar x libc6.deb
+  tar xf data.tar.* -C "$SYSROOT"
+  cd -
+  rm -rf "$TMPDIR_DEB"
+  echo "$(date): glibc 2.28 sysroot installed at $SYSROOT"
+else
+  echo "$(date): glibc 2.28 sysroot already installed at $SYSROOT"
+fi
+
+# --- 3. Set environment variables for glibc compatibility ---
+export VSCODE_SERVER_CUSTOM_GLIBC_LINKER="$SYSROOT/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+export VSCODE_SERVER_CUSTOM_GLIBC_PATH="$SYSROOT/lib/x86_64-linux-gnu"
+export VSCODE_SERVER_PATCHELF_PATH="$PATCHELF"
+
+# Disable keychain encryption (no GUI on compute nodes)
+export CURSOR_CLI_DISABLE_KEYCHAIN_ENCRYPT=1
+
+# --- 4. Symlink ~/.cursor-server to $SCRATCH ---
+CURSOR_SERVER_DIR="$HOME/.cursor-server"
+CURSOR_SERVER_SCRATCH="$SCRATCH/.cursor-server"
+if [[ ! -L "$CURSOR_SERVER_DIR" ]]; then
+  mkdir -p "$CURSOR_SERVER_SCRATCH"
+  if [[ -d "$CURSOR_SERVER_DIR" && ! -L "$CURSOR_SERVER_DIR" ]]; then
+    # Move existing data to scratch, then symlink
+    mv "$CURSOR_SERVER_DIR"/* "$CURSOR_SERVER_SCRATCH/" 2>/dev/null || true
+    rmdir "$CURSOR_SERVER_DIR" 2>/dev/null || rm -rf "$CURSOR_SERVER_DIR"
+  fi
+  ln -s "$CURSOR_SERVER_SCRATCH" "$CURSOR_SERVER_DIR"
+  echo "$(date): Symlinked $CURSOR_SERVER_DIR -> $CURSOR_SERVER_SCRATCH"
+fi
+
+# --- 5. Change to workspace directory ---
+cd <%= context.sh_workspace.blank? ? "$HOME" : context.sh_workspace %>
+
+# --- 6. Background readiness signaling ---
+# OOD's after.sh uses wait_until_port_used to detect readiness.
+# Since the tunnel doesn't open a TCP port, we use a background listener
+# that opens $port via nc once we detect the tunnel is ready.
+rm -f "$MARKER_FILE"
+(
+  echo "$(date): [signal] Waiting for tunnel readiness marker..."
+  while [[ ! -f "$MARKER_FILE" ]]; do
+    sleep 2
+  done
+  echo "$(date): [signal] Tunnel ready, opening port $port for OOD detection..."
+  # Keep nc listening so wait_until_port_used can detect it
+  while true; do
+    echo "OK" | nc -l "$port" >/dev/null 2>&1 || true
+    sleep 1
+  done
+) &
+SIGNAL_PID=$!
+echo "$(date): [signal] Background signaling listener started (PID $SIGNAL_PID)"
+
+# --- 7. Start Cursor tunnel ---
+echo "$(date): Starting Cursor tunnel (name: $CURSOR_TUNNEL_NAME)..."
+"$CURSOR_CLI" tunnel \
+  --accept-server-license-terms \
+  --name "$CURSOR_TUNNEL_NAME" \
+  > "$CURSOR_LOG" 2>&1 &
+TUNNEL_PID=$!
+echo "$(date): Cursor tunnel started (PID $TUNNEL_PID)"
+
+# --- 8. Monitor log for readiness ---
+echo "$(date): Monitoring tunnel log for readiness..."
+TIMEOUT=180
+ELAPSED=0
+READY=false
+while [[ $ELAPSED -lt $TIMEOUT ]]; do
+  if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
+    echo "$(date): Tunnel process exited unexpectedly!"
+    # Check for auth errors
+    if grep -qi "not logged in\|login required\|unauthorized\|auth" "$CURSOR_LOG" 2>/dev/null; then
+      echo ""
+      echo "============================================================"
+      echo "ERROR: Cursor tunnel authentication required."
+      echo ""
+      echo "Run the following on a Sherlock login node:"
+      echo "  ~/.cursor-tunnel/cursor tunnel user login --provider microsoft"
+      echo ""
+      echo "Or run the setup script:"
+      echo "  bash ~/ondemand/dev/sh_cursor/setup.sh"
+      echo "============================================================"
+      echo ""
+    fi
+    cat "$CURSOR_LOG"
+    kill "$SIGNAL_PID" 2>/dev/null || true
+    exit 1
+  fi
+
+  if grep -q "Ready to accept connections\|tunnel_name\|Listening for incoming connections\|connected to tunnel" "$CURSOR_LOG" 2>/dev/null; then
+    READY=true
+    break
+  fi
+
+  sleep 2
+  ELAPSED=$((ELAPSED + 2))
+done
+
+if $READY; then
+  echo "$(date): Tunnel is ready!"
+  touch "$MARKER_FILE"
+else
+  echo "$(date): WARNING: Timed out waiting for readiness strings (${TIMEOUT}s)."
+  echo "$(date): Tunnel may still be starting. Creating marker anyway..."
+  echo "--- Tunnel log so far ---"
+  cat "$CURSOR_LOG"
+  echo "--- End tunnel log ---"
+  touch "$MARKER_FILE"
+fi
+
+# --- 9. Keep job alive ---
+echo "$(date): Waiting for tunnel process to exit..."
+wait "$TUNNEL_PID"
+TUNNEL_EXIT=$?
+echo "$(date): Tunnel exited with code $TUNNEL_EXIT"
+
+# Clean up signaling
+kill "$SIGNAL_PID" 2>/dev/null || true
+
+exit $TUNNEL_EXIT

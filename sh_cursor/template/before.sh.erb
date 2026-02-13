@@ -1,0 +1,11 @@
+# Export the module function if it exists
+[[ $(type -t module) == "function" ]] && export -f module
+
+# Find available port (used for readiness signaling, not HTTP)
+export port=$(find_port "$host")
+
+# Create password (satisfies basic batch_connect template)
+export password=$(create_passwd 16)
+
+# Export tunnel name from form
+export CURSOR_TUNNEL_NAME="<%= context.cursor_tunnel_name %>"
