@@ -9,3 +9,18 @@ export password=$(create_passwd 16)
 
 # Export tunnel name from form
 export CURSOR_TUNNEL_NAME="<%= context.cursor_tunnel_name %>"
+
+# Override create_yml to include cursor_tunnel_name in connection.yml
+# (OOD's default only writes host/port/password)
+create_yml() {
+  echo "Generating connection YAML file..."
+  (
+    umask 077
+    cat > "$PWD/connection.yml" <<EOYML
+host: $host
+port: $port
+password: $password
+cursor_tunnel_name: $CURSOR_TUNNEL_NAME
+EOYML
+  )
+}

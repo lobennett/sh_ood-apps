@@ -20,9 +20,9 @@ MARKER_FILE="$PWD/cursor-tunnel-ready"
 if [[ ! -x "$CURSOR_CLI" ]]; then
   echo "$(date): Installing Cursor CLI..."
   mkdir -p "$CURSOR_CLI_DIR"
-  curl -fsSL "https://api2.cursor.sh/updates/download-latest?os=cli-alpine-x64" \
+  curl -fsSL "https://api2.cursor.sh/updates/download-latest?os=cli-linux-x64" \
     -o "$CURSOR_CLI_DIR/cursor.tar.gz"
-  tar xzf "$CURSOR_CLI_DIR/cursor.tar.gz" -C "$CURSOR_CLI_DIR" --strip-components=1
+  tar xzf "$CURSOR_CLI_DIR/cursor.tar.gz" -C "$CURSOR_CLI_DIR"
   rm -f "$CURSOR_CLI_DIR/cursor.tar.gz"
   chmod +x "$CURSOR_CLI"
   echo "$(date): Cursor CLI installed at $CURSOR_CLI"
@@ -39,7 +39,7 @@ if [[ ! -x "$PATCHELF" ]]; then
   mkdir -p "$CURSOR_DEPS/bin"
   curl -fsSL "https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-x86_64.tar.gz" \
     -o "$CURSOR_DEPS/patchelf.tar.gz"
-  tar xzf "$CURSOR_DEPS/patchelf.tar.gz" -C "$CURSOR_DEPS" --strip-components=1 bin/patchelf
+  tar xzf "$CURSOR_DEPS/patchelf.tar.gz" -C "$CURSOR_DEPS" --strip-components=1 ./bin/patchelf
   rm -f "$CURSOR_DEPS/patchelf.tar.gz"
   echo "$(date): patchelf installed at $PATCHELF"
 else
@@ -50,7 +50,7 @@ if [[ ! -d "$SYSROOT/lib/x86_64-linux-gnu" ]]; then
   echo "$(date): Installing glibc 2.28 sysroot from Debian buster..."
   mkdir -p "$SYSROOT"
   TMPDIR_DEB=$(mktemp -d)
-  curl -fsSL "https://deb.debian.org/debian/pool/main/g/glibc/libc6_2.28-10+deb10u4_amd64.deb" \
+  curl -fsSL "https://snapshot.debian.org/archive/debian-security/20240630T105336Z/pool/updates/main/g/glibc/libc6_2.28-10%2Bdeb10u4_amd64.deb" \
     -o "$TMPDIR_DEB/libc6.deb"
   cd "$TMPDIR_DEB"
   ar x libc6.deb
@@ -62,9 +62,55 @@ else
   echo "$(date): glibc 2.28 sysroot already installed at $SYSROOT"
 fi
 
-# --- 3. Set environment variables for glibc compatibility ---
-export VSCODE_SERVER_CUSTOM_GLIBC_LINKER="$SYSROOT/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
-export VSCODE_SERVER_CUSTOM_GLIBC_PATH="$SYSROOT/lib/x86_64-linux-gnu"
+# --- 3. Patch Cursor CLI to use glibc 2.28 (if not already patched) ---
+SYSROOT_LIB="$SYSROOT/lib/x86_64-linux-gnu"
+CURRENT_INTERP=$("$PATCHELF" --print-interpreter "$CURSOR_CLI" 2>/dev/null || true)
+if [[ "$CURRENT_INTERP" != "$SYSROOT_LIB/ld-linux-x86-64.so.2" ]]; then
+  echo "$(date): Patching Cursor CLI to use glibc 2.28..."
+  "$PATCHELF" --set-interpreter "$SYSROOT_LIB/ld-linux-x86-64.so.2" \
+    --set-rpath "$SYSROOT_LIB" \
+    "$CURSOR_CLI"
+  echo "$(date): Cursor CLI patched successfully"
+fi
+
+# --- 3b. Build IPv4 shim if missing (Sherlock compute nodes lack IPv6) ---
+FORCE_IPV4_SO="$CURSOR_DEPS/lib/force_ipv4.so"
+if [[ ! -f "$FORCE_IPV4_SO" ]]; then
+  echo "$(date): Building IPv4 shim library..."
+  mkdir -p "$CURSOR_DEPS/lib"
+  SHIM_SRC="$(dirname "$0")/../template/force_ipv4.c"
+  if [[ -f "$SHIM_SRC" ]]; then
+    gcc -shared -fPIC -o "$FORCE_IPV4_SO" "$SHIM_SRC" -ldl
+  else
+    # Inline fallback if source not available in job directory
+    cat > "/tmp/force_ipv4_$$.c" <<'CEOF'
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <netdb.h>
+#include <sys/socket.h>
+#include <stdlib.h>
+int getaddrinfo(const char *node, const char *service,
+                const struct addrinfo *hints, struct addrinfo **res) {
+    static int (*real_getaddrinfo)(const char *, const char *,
+                                  const struct addrinfo *, struct addrinfo **) = NULL;
+    if (!real_getaddrinfo) real_getaddrinfo = dlsym(RTLD_NEXT, "getaddrinfo");
+    struct addrinfo modified_hints;
+    if (hints) { modified_hints = *hints; } else { modified_hints = (struct addrinfo){0}; }
+    modified_hints.ai_family = AF_INET;
+    return real_getaddrinfo(node, service, &modified_hints, res);
+}
+CEOF
+    gcc -shared -fPIC -o "$FORCE_IPV4_SO" "/tmp/force_ipv4_$$.c" -ldl
+    rm -f "/tmp/force_ipv4_$$.c"
+  fi
+  echo "$(date): IPv4 shim built at $FORCE_IPV4_SO"
+else
+  echo "$(date): IPv4 shim already built at $FORCE_IPV4_SO"
+fi
+
+# --- 3c. Set environment variables for glibc compatibility (for the server) ---
+export VSCODE_SERVER_CUSTOM_GLIBC_LINKER="$SYSROOT_LIB/ld-linux-x86-64.so.2"
+export VSCODE_SERVER_CUSTOM_GLIBC_PATH="$SYSROOT_LIB"
 export VSCODE_SERVER_PATCHELF_PATH="$PATCHELF"
 
 # Disable keychain encryption (no GUI on compute nodes)
@@ -107,16 +153,29 @@ rm -f "$MARKER_FILE"
 SIGNAL_PID=$!
 echo "$(date): [signal] Background signaling listener started (PID $SIGNAL_PID)"
 
-# --- 7. Start Cursor tunnel ---
+# --- 7. Resolve sinkholed tunnel domains via external DNS ---
+# Sherlock DNS sinkhole blocks *.tunnels.api.visualstudio.com -> 0.0.0.0
+# Resolve real IPs via Google Public DNS and pass to our LD_PRELOAD shim
+echo "$(date): Resolving tunnel service IPs via external DNS..."
+TUNNEL_IP=$(dig +short @8.8.8.8 global.rel.tunnels.api.visualstudio.com A 2>/dev/null | grep -E '^[0-9]+\.' | head -1)
+if [[ -z "$TUNNEL_IP" ]]; then
+  echo "$(date): WARNING: Could not resolve tunnel service IP via external DNS"
+  echo "$(date): Tunnel will likely fail. Check network connectivity."
+else
+  echo "$(date): Resolved global.rel.tunnels.api.visualstudio.com -> $TUNNEL_IP"
+fi
+export CURSOR_DNS_OVERRIDES="*.tunnels.api.visualstudio.com=${TUNNEL_IP}"
+
+# --- 8. Start Cursor tunnel (with IPv4 + DNS override shim) ---
 echo "$(date): Starting Cursor tunnel (name: $CURSOR_TUNNEL_NAME)..."
-"$CURSOR_CLI" tunnel \
+LD_PRELOAD="$FORCE_IPV4_SO" "$CURSOR_CLI" tunnel \
   --accept-server-license-terms \
   --name "$CURSOR_TUNNEL_NAME" \
   > "$CURSOR_LOG" 2>&1 &
 TUNNEL_PID=$!
 echo "$(date): Cursor tunnel started (PID $TUNNEL_PID)"
 
-# --- 8. Monitor log for readiness ---
+# --- 9. Monitor log for readiness ---
 echo "$(date): Monitoring tunnel log for readiness..."
 TIMEOUT=180
 ELAPSED=0
@@ -143,7 +202,7 @@ while [[ $ELAPSED -lt $TIMEOUT ]]; do
     exit 1
   fi
 
-  if grep -q "Ready to accept connections\|tunnel_name\|Listening for incoming connections\|connected to tunnel" "$CURSOR_LOG" 2>/dev/null; then
+  if grep -q "Ready to accept connections\|Creating tunnel with the name\|Listening for incoming connections\|connected to tunnel" "$CURSOR_LOG" 2>/dev/null; then
     READY=true
     break
   fi
@@ -164,7 +223,7 @@ else
   touch "$MARKER_FILE"
 fi
 
-# --- 9. Keep job alive ---
+# --- 10. Keep job alive ---
 echo "$(date): Waiting for tunnel process to exit..."
 wait "$TUNNEL_PID"
 TUNNEL_EXIT=$?

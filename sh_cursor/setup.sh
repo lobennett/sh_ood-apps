@@ -36,10 +36,10 @@ if [[ -x "$CURSOR_CLI" ]]; then
   echo "      Already installed at $CURSOR_CLI"
 else
   mkdir -p "$CURSOR_CLI_DIR"
-  echo "      Downloading from api2.cursor.sh..."
-  curl -fsSL "https://api2.cursor.sh/updates/download-latest?os=cli-alpine-x64" \
+  echo "      Downloading from api2.cursor.sh (linux-x64)..."
+  curl -fsSL "https://api2.cursor.sh/updates/download-latest?os=cli-linux-x64" \
     -o "$CURSOR_CLI_DIR/cursor.tar.gz"
-  tar xzf "$CURSOR_CLI_DIR/cursor.tar.gz" -C "$CURSOR_CLI_DIR" --strip-components=1
+  tar xzf "$CURSOR_CLI_DIR/cursor.tar.gz" -C "$CURSOR_CLI_DIR"
   rm -f "$CURSOR_CLI_DIR/cursor.tar.gz"
   chmod +x "$CURSOR_CLI"
   echo "      Installed at $CURSOR_CLI"
@@ -58,7 +58,7 @@ else
   echo "      Downloading from GitHub..."
   curl -fsSL "https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-x86_64.tar.gz" \
     -o "$CURSOR_DEPS/patchelf.tar.gz"
-  tar xzf "$CURSOR_DEPS/patchelf.tar.gz" -C "$CURSOR_DEPS" --strip-components=1 bin/patchelf
+  tar xzf "$CURSOR_DEPS/patchelf.tar.gz" -C "$CURSOR_DEPS" --strip-components=1 ./bin/patchelf
   rm -f "$CURSOR_DEPS/patchelf.tar.gz"
   echo "      Installed at $PATCHELF"
 fi
@@ -74,7 +74,7 @@ else
   mkdir -p "$SYSROOT"
   TMPDIR_DEB=$(mktemp -d)
   echo "      Downloading Debian buster libc6..."
-  curl -fsSL "https://deb.debian.org/debian/pool/main/g/glibc/libc6_2.28-10+deb10u4_amd64.deb" \
+  curl -fsSL "https://snapshot.debian.org/archive/debian-security/20240630T105336Z/pool/updates/main/g/glibc/libc6_2.28-10%2Bdeb10u4_amd64.deb" \
     -o "$TMPDIR_DEB/libc6.deb"
   cd "$TMPDIR_DEB"
   ar x libc6.deb
@@ -83,6 +83,22 @@ else
   rm -rf "$TMPDIR_DEB"
   echo "      Installed at $SYSROOT"
 fi
+echo ""
+
+# --- 3b. Patch Cursor CLI to use glibc 2.28 sysroot ---
+SYSROOT_LIB="$SYSROOT/lib/x86_64-linux-gnu"
+echo "      Patching Cursor CLI to use glibc 2.28..."
+"$PATCHELF" --set-interpreter "$SYSROOT_LIB/ld-linux-x86-64.so.2" \
+  --set-rpath "$SYSROOT_LIB" \
+  "$CURSOR_CLI"
+echo "      Patched successfully"
+
+# --- 3c. Build IPv4 LD_PRELOAD shim ---
+FORCE_IPV4_SO="$CURSOR_DEPS/lib/force_ipv4.so"
+echo "      Building IPv4 shim library..."
+mkdir -p "$CURSOR_DEPS/lib"
+gcc -shared -fPIC -o "$FORCE_IPV4_SO" "$SCRIPT_DIR/template/force_ipv4.c" -ldl
+echo "      Built $FORCE_IPV4_SO"
 echo ""
 
 # --- 4. Symlink ~/.cursor-server to $SCRATCH ---
@@ -122,6 +138,13 @@ mkdir -p "$OOD_DEV_DIR"
 rsync -av --delete \
   --exclude='setup.sh' \
   "$SCRIPT_DIR/" "$OOD_DEV_DIR/"
+
+# Install shared _common directory (required by form.yml.erb)
+OOD_COMMON_DIR="$HOME/ondemand/dev/_common"
+echo "Installing shared files to $OOD_COMMON_DIR..."
+mkdir -p "$OOD_COMMON_DIR"
+rsync -av --delete \
+  "$SCRIPT_DIR/../_common/" "$OOD_COMMON_DIR/"
 echo ""
 
 echo "======================================"

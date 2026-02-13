@@ -1,77 +1,76 @@
-<%
-  tunnel_name = context.cursor_tunnel_name
-%>
-
-<div class="panel panel-default">
+<div class="panel panel-success">
   <div class="panel-heading">
-    <h3 class="panel-title"><i class="fa fa-terminal"></i> Cursor Remote Tunnel</h3>
+    <h3 class="panel-title"><i class="fa fa-check-circle"></i> Your Cursor Session is Ready</h3>
   </div>
   <div class="panel-body">
-    <p>
-      Your Cursor tunnel is running on <strong><%= host %></strong> with tunnel name:
+    <p style="font-size: 16px;">
+      A Cursor tunnel named <strong><%= cursor_tunnel_name %></strong> is running on
+      compute node <code><%= host %></code>.
     </p>
-    <div class="input-group" style="max-width: 400px; margin-bottom: 15px;">
-      <input type="text" class="form-control" id="tunnel-name" value="<%= tunnel_name %>" readonly>
-      <span class="input-group-btn">
-        <button class="btn btn-default" type="button" onclick="copyTunnelName()">
-          <i class="fa fa-clipboard"></i> Copy
-        </button>
-      </span>
-    </div>
 
-    <h4>How to connect:</h4>
-    <ol>
-      <li>Open <strong>Cursor</strong> on your local machine</li>
-      <li>Install the <strong>Remote - Tunnels</strong> extension (if not already installed)</li>
-      <li>Open the Command Palette (<code>Cmd+Shift+P</code> / <code>Ctrl+Shift+P</code>)</li>
-      <li>Run <code>Remote Tunnels: Connect to Tunnel...</code></li>
-      <li>Sign in with <strong>Microsoft</strong> when prompted</li>
-      <li>Select tunnel: <strong><%= tunnel_name %></strong></li>
+    <hr>
+
+    <h4>Connect from your local Cursor app:</h4>
+    <ol style="font-size: 14px; line-height: 2;">
+      <li>Open <strong>Cursor</strong> on your computer</li>
+      <li>
+        Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>
+        (or <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> on Mac)
+        to open the Command Palette
+      </li>
+      <li>
+        Type <code>Remote Tunnels: Connect to Tunnel</code> and select it
+        <br>
+        <small class="text-muted">
+          If you don't see this option, install the
+          <strong>Remote - Tunnels</strong> extension first
+          (search for <code>ms-vscode.remote-server</code> in the Extensions panel)
+        </small>
+      </li>
+      <li>Sign in with <strong>Microsoft</strong> when prompted (use the same account you used during setup)</li>
+      <li>Select the tunnel named:
+        <div class="input-group" style="max-width: 300px; margin-top: 5px;">
+          <input type="text" class="form-control input-lg" id="tunnel-name"
+                 value="<%= cursor_tunnel_name %>" readonly
+                 style="font-weight: bold; font-size: 18px;">
+          <span class="input-group-btn">
+            <button class="btn btn-default btn-lg" type="button" onclick="copyTunnelName()"
+                    title="Copy tunnel name">
+              <i class="fa fa-clipboard"></i>
+            </button>
+          </span>
+        </div>
+      </li>
     </ol>
   </div>
 </div>
 
 <div class="panel panel-default">
   <div class="panel-heading">
-    <h3 class="panel-title"><i class="fa fa-server"></i> Direct SSH Access</h3>
+    <h3 class="panel-title"><i class="fa fa-question-circle"></i> Troubleshooting</h3>
   </div>
   <div class="panel-body">
-    <p>You can also SSH directly to the compute node:</p>
-    <div class="input-group" style="max-width: 500px;">
-      <input type="text" class="form-control" id="ssh-command" value="ssh <%= host %>" readonly>
-      <span class="input-group-btn">
-        <button class="btn btn-default" type="button" onclick="copySshCommand()">
-          <i class="fa fa-clipboard"></i> Copy
-        </button>
-      </span>
-    </div>
-  </div>
-</div>
-
-<div class="panel panel-default">
-  <div class="panel-heading">
-    <h3 class="panel-title"><i class="fa fa-wrench"></i> Troubleshooting</h3>
-  </div>
-  <div class="panel-body">
-    <dl>
-      <dt>Tunnel not appearing in Cursor?</dt>
+    <dl style="font-size: 14px;">
+      <dt>Don't see "Remote Tunnels: Connect to Tunnel" in the Command Palette?</dt>
       <dd>
-        Make sure you're signed in to the same Microsoft account on both
-        the tunnel and your local Cursor client.
+        You need the <strong>Remote - Tunnels</strong> extension. In Cursor, go to the
+        Extensions panel (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>), search for
+        <code>ms-vscode.remote-server</code>, and click Install.
       </dd>
 
-      <dt>Authentication expired?</dt>
+      <dt style="margin-top: 10px;">Tunnel not appearing in the list?</dt>
       <dd>
-        SSH to Sherlock and re-authenticate:
-        <pre>~/.cursor-tunnel/cursor tunnel user login --provider microsoft</pre>
-        Then restart this OOD session.
+        Make sure you're signed into the same Microsoft account on both your local
+        Cursor and the Sherlock tunnel. You can re-authenticate by running this on a
+        Sherlock login node:
+        <pre style="margin-top: 5px;">~/.cursor-tunnel/cursor tunnel user login --provider microsoft</pre>
+        Then restart this session.
       </dd>
 
-      <dt>First time setup?</dt>
+      <dt style="margin-top: 10px;">First time using Cursor on Sherlock?</dt>
       <dd>
-        Run the setup script on a Sherlock login node:
-        <pre>bash ~/ondemand/dev/sh_cursor/setup.sh</pre>
-        This will install dependencies and authenticate your account.
+        Run the one-time setup script from a Sherlock login node:
+        <pre style="margin-top: 5px;">bash /home/groups/russpold/code/sh_ood-apps/sh_cursor/setup.sh</pre>
       </dd>
     </dl>
   </div>
@@ -81,12 +80,9 @@
 function copyTunnelName() {
   var el = document.getElementById('tunnel-name');
   el.select();
-  document.execCommand('copy');
-}
-
-function copySshCommand() {
-  var el = document.getElementById('ssh-command');
-  el.select();
-  document.execCommand('copy');
+  el.setSelectionRange(0, 99999);
+  navigator.clipboard.writeText(el.value).catch(function() {
+    document.execCommand('copy');
+  });
 }
 </script>
