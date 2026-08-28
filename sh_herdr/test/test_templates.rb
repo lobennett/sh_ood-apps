@@ -176,7 +176,6 @@ class TemplateTest < Minitest::Test
     assert_includes job_script, '[[ $status_json == \{* && $status_json == *\} && ( $status_json == *\'"running":true,\'* || $status_json == *\'"running":true}\' ) ]]'
     refute_match(/\bruby\b/, job_script)
     assert_includes job_script, "herdr_staging_dir"
-    assert_includes job_script, "source #{File.join(APP_ROOT, "sh_herdr/lib/runtime.sh")}"
     assert_includes after_script, "herdr-ready"
     assert_includes after_script, "herdr_staging_dir"
     assert_includes view, "sherlock-herdr"

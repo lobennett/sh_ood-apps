@@ -5,7 +5,6 @@ session = context.herdr_session.to_s
 workspace = context.sh_workspace.to_s
 workspace = "$HOME" if workspace.blank?
 optional_modules = Shellwords.shellsplit(context.sh_modules.to_s)
-runtime_library = File.expand_path("../lib/runtime.sh", File.dirname(__FILE__))
 %>
 #!/usr/bin/env bash
 
@@ -27,7 +26,8 @@ module load <%= optional_modules.map { |name| Shellwords.escape(name) }.join(" "
 <%= context.sh_preexec %>
 <% end -%>
 
-source <%= Shellwords.escape(runtime_library) %>
+runtime_library=${SHERLOCK_HERDR_RUNTIME_LIBRARY:-$HOME/.local/libexec/sherlock-herdr/runtime.sh}
+source "$runtime_library"
 
 session=<%= Shellwords.escape(session) %>
 workspace=<%= Shellwords.escape(workspace) %>

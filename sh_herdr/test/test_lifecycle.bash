@@ -8,10 +8,12 @@ test_root=$(mktemp -d "${TMPDIR:-/tmp}/sherlock-herdr-lifecycle.XXXXXX")
 fake_bin="$test_root/bin"
 home_dir="$test_root/home"
 home_herdr_bin="$home_dir/.local/bin/herdr"
+home_runtime_library="$home_dir/.local/libexec/sherlock-herdr/runtime.sh"
 staging_dir="$test_root/staging"
 workspace_dir="$test_root/workspace"
 state_root="$test_root/state"
-mkdir -p "$fake_bin" "${home_herdr_bin%/*}" "$staging_dir" "$workspace_dir"
+mkdir -p "$fake_bin" "${home_herdr_bin%/*}" "${home_runtime_library%/*}" "$staging_dir" "$workspace_dir"
+cp "$app_root/lib/runtime.sh" "$home_runtime_library"
 
 runtime_dir_for_job() {
   printf '/tmp/sherlock-herdr-%s-%s\n' "$UID" "$1"
@@ -60,7 +62,8 @@ end
 
 path = ENV.fetch("TEMPLATE_PATH")
 renderer = ERB.new(File.read(path), trim_mode: "-")
-renderer.filename = path
+# Open OnDemand renders development templates from the system dashboard process.
+renderer.filename = "/var/www/ood/apps/sys/dashboard"
 print renderer.result(RenderContext.new.get_binding)
 RUBY
 }
