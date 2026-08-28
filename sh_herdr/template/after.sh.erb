@@ -2,11 +2,19 @@
 
 set -euo pipefail
 
+staging_dir=${herdr_staging_dir:-}
+if [[ $staging_dir != /* || ! -d $staging_dir ]]; then
+  printf 'Batch Connect staging directory is missing or not absolute\n' >&2
+  clean_up 1
+fi
+ready_marker="$staging_dir/herdr-ready"
+server_log="$staging_dir/herdr-server.log"
+
 for _ in {1..120}; do
-  [[ -f "$PWD/herdr-ready" ]] && exit 0
+  [[ -f $ready_marker ]] && exit 0
   sleep 1
 done
 
 printf 'Timed out waiting for Herdr startup.\n' >&2
-cat "$PWD/herdr-server.log" >&2 || true
+cat "$server_log" >&2 || true
 clean_up 1

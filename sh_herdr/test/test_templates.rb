@@ -145,14 +145,21 @@ class TemplateTest < Minitest::Test
 
     assert_includes before_script, "export herdr_session=sherlock"
     assert_includes before_script, "export herdr_workspace=/home/users/test/work"
+    assert_includes before_script, "export herdr_staging_dir=\"$PWD\""
     assert_includes job_script, "module load claude-code codex"
+    assert_includes job_script, "HERDR_SESSION"
     assert_includes job_script, "HERDR_SOCKET_PATH"
-    assert_includes job_script, "herdr --session"
+    refute_includes job_script, "--session"
+    assert_includes job_script, "JSON.parse"
+    assert_includes job_script, 'fetch("running") == true'
+    assert_includes job_script, "herdr_staging_dir"
     assert_includes job_script, "source #{File.join(APP_ROOT, "sh_herdr/lib/runtime.sh")}"
     assert_includes after_script, "herdr-ready"
+    assert_includes after_script, "herdr_staging_dir"
     assert_includes view, "sherlock-herdr"
     assert_includes view, "session.job_id"
     refute_includes view, "/rnode/"
+    refute_match(/<form|https?:\/\/|password/i, view)
   end
 
   def test_rendered_scripts_escape_form_values_without_disabling_raw_initialization
@@ -178,5 +185,20 @@ class TemplateTest < Minitest::Test
     view = render("sh_herdr/view.html.erb", values.merge(job_id: "42<unsafe"))
     assert_includes view, "42&lt;unsafe"
     refute_includes view, "42<unsafe"
+  end
+
+  def test_view_escapes_all_display_values_and_includes_one_time_setup_instruction
+    view = render(
+      "sh_herdr/view.html.erb",
+      herdr_session: "session<unsafe",
+      sh_workspace: "/work/<unsafe",
+      job_id: "42<unsafe"
+    )
+
+    assert_includes view, "session&lt;unsafe"
+    assert_includes view, "/work/&lt;unsafe"
+    assert_includes view, "42&lt;unsafe"
+    assert_includes view, "setup"
+    refute_match(/<form|\/rnode\/|https?:\/\/|password/i, view)
   end
 end

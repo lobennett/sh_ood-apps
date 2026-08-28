@@ -32,6 +32,7 @@ source <%= Shellwords.escape(runtime_library) %>
 session=<%= Shellwords.escape(session) %>
 workspace=<%= Shellwords.escape(workspace) %>
 job_id=${SLURM_JOB_ID:-}
+staging_dir=${herdr_staging_dir:-}
 
 if [[ $workspace == '$HOME' ]]; then
   workspace=$HOME
@@ -49,6 +50,12 @@ validate_job_id "$job_id" || {
   printf 'Initial workspace is not a directory: %s\n' "$workspace" >&2
   exit 2
 }
+[[ $staging_dir == /* && -d $staging_dir ]] || {
+  printf 'Batch Connect staging directory is missing or not absolute\n' >&2
+  exit 2
+}
+ready_marker="$staging_dir/herdr-ready"
+server_log="$staging_dir/herdr-server.log"
 
 command -v herdr >/dev/null || {
   printf 'herdr is not available after module initialization\n' >&2
@@ -56,11 +63,27 @@ command -v herdr >/dev/null || {
 }
 case <%= Shellwords.escape(context.herdr_agents.to_s) %> in
   both)
-    command -v claude >/dev/null
-    command -v codex >/dev/null
+    command -v claude >/dev/null || {
+      printf 'Claude command is unavailable after module initialization\n' >&2
+      exit 2
+    }
+    command -v codex >/dev/null || {
+      printf 'Codex command is unavailable after module initialization\n' >&2
+      exit 2
+    }
     ;;
-  claude) command -v claude >/dev/null ;;
-  codex) command -v codex >/dev/null ;;
+  claude)
+    command -v claude >/dev/null || {
+      printf 'Claude command is unavailable after module initialization\n' >&2
+      exit 2
+    }
+    ;;
+  codex)
+    command -v codex >/dev/null || {
+      printf 'Codex command is unavailable after module initialization\n' >&2
+      exit 2
+    }
+    ;;
   none) ;;
 esac
 
@@ -76,47 +99,60 @@ mkdir -m 700 "$runtime_dir"
 server_pid=
 cleanup_started=0
 cleanup() {
+  local original_status=${1:-0}
+
   if (( cleanup_started )); then
     return 0
   fi
   cleanup_started=1
+  trap '' INT TERM
 
-  HERDR_SOCKET_PATH="$socket" herdr --session "$session" server stop >/dev/null 2>&1 || true
+  HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" herdr server stop >/dev/null 2>&1 || true
   if [[ ${server_pid:-} =~ ^[0-9]+$ ]] && kill -0 "$server_pid" 2>/dev/null; then
     for _ in {1..20}; do
       kill -0 "$server_pid" 2>/dev/null || break
       sleep 0.25
     done
     if kill -0 "$server_pid" 2>/dev/null; then
-      kill "$server_pid" 2>/dev/null || true
+      kill -TERM "$server_pid" 2>/dev/null || true
+    fi
+    for _ in {1..20}; do
+      kill -0 "$server_pid" 2>/dev/null || break
+      sleep 0.25
+    done
+    if kill -0 "$server_pid" 2>/dev/null; then
+      kill -KILL "$server_pid" 2>/dev/null || true
     fi
     wait "$server_pid" 2>/dev/null || true
   fi
   release_job_state "$session" "$job_id" || true
   remove_runtime_dir "$job_id" "$runtime_dir" || true
+  return "$original_status"
 }
-trap 'status=$?; cleanup; exit "$status"' EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'status=$?; cleanup "$status"; exit "$status"' EXIT
+trap 'trap "" INT TERM; exit 130' INT
+trap 'trap "" INT TERM; exit 143' TERM
 
 acquire_session_lock "$session" "$job_id"
 write_job_record "$job_id" "$session" "$socket" "${SLURMD_NODENAME:-$(hostname)}"
 
 cd "$workspace"
-rm -f "$PWD/herdr-ready"
-HERDR_SOCKET_PATH="$socket" herdr --session "$session" server >"$PWD/herdr-server.log" 2>&1 &
+rm -f "$ready_marker"
+HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" herdr server >"$server_log" 2>&1 &
 server_pid=$!
 
 ready=0
 deadline=$((SECONDS + 120))
 while (( SECONDS < deadline )); do
-  if HERDR_SOCKET_PATH="$socket" herdr --session "$session" status server --json >/dev/null 2>&1; then
+  status_json=$(HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" herdr status server --json 2>>"$server_log") || status_json=
+  if ruby -rjson -e 'status = JSON.parse(STDIN.read); exit(status.fetch("running") == true ? 0 : 1)' \
+    <<< "$status_json" >/dev/null 2>&1; then
     ready=1
     break
   fi
   if ! kill -0 "$server_pid" 2>/dev/null; then
     printf 'Herdr server exited before becoming ready.\n' >&2
-    cat "$PWD/herdr-server.log" >&2 || true
+    cat "$server_log" >&2 || true
     exit 1
   fi
   sleep 2
@@ -124,18 +160,18 @@ done
 
 if (( ! ready )); then
   printf 'Timed out waiting for Herdr server readiness.\n' >&2
-  cat "$PWD/herdr-server.log" >&2 || true
+  cat "$server_log" >&2 || true
   exit 1
 fi
 
-workspace_list=$(HERDR_SOCKET_PATH="$socket" herdr --session "$session" workspace list)
+workspace_list=$(HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" herdr workspace list)
 if [[ $workspace_list != *workspace_id* ]]; then
-  HERDR_SOCKET_PATH="$socket" herdr --session "$session" workspace create \
+  HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" herdr workspace create \
     --cwd "$workspace" --label "$(basename "$workspace")" --no-focus
 fi
 
-touch "$PWD/herdr-ready"
+touch "$ready_marker"
 if ! wait "$server_pid"; then
-  cat "$PWD/herdr-server.log" >&2 || true
+  cat "$server_log" >&2 || true
   exit 1
 fi
