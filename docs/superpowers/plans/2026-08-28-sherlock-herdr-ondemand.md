@@ -413,7 +413,7 @@ Start the server in the background, poll for at most 120 seconds with:
 HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" status server --json
 ```
 
-Inspect Herdr 0.8.2's compact JSON output with a dependency-free Bash predicate and require the exact boolean field `"running":true` followed by a JSON field/object delimiter; exit status alone is not readiness, and the generated compute script must not depend on Ruby, Python, or `jq`. If the server exits, the readiness field is false/absent, the output is malformed, or the timeout expires, print the staging-directory server log and fail. Once ready, create an initial workspace only when `workspace list` contains no `workspace_id`, using `workspace create --cwd "$workspace" --label "$(basename "$workspace")" --no-focus`. Touch the staging-directory readiness marker, then `wait` for the server process.
+Inspect Herdr 0.8.2's compact JSON output with a dependency-free Bash predicate. Require the complete status text to begin with `{`, end with `}`, and contain the exact boolean field `"running":true` followed by a JSON field/object delimiter; exit status alone is not readiness, and the generated compute script must not depend on Ruby, Python, or `jq`. If the server exits, the readiness field is false/absent, the output is malformed, or the timeout expires, print the staging-directory server log and fail. Once ready, create an initial workspace only when `workspace list` contains no `workspace_id`, using `workspace create --cwd "$workspace" --label "$(basename "$workspace")" --no-focus`. Touch the staging-directory readiness marker, then `wait` for the server process.
 
 - [ ] **Step 5: Implement readiness and connection view**
 
@@ -696,7 +696,7 @@ Expected: all tests PASS, worktree clean, and the feature branch contains only d
 
 - [ ] **Step 2: Submit a short allocation through the development app**
 
-Open `https://ondemand.sherlock.stanford.edu`, choose the development `Herdr` app, and submit these values: session `sherlock-smoke`, agents `Both`, workspace `$HOME`, partition `russpold`, 2 CPUs, 8 GB, and 0.5 hours. Record the Slurm job ID shown on the session card. Do not substitute a login-node Herdr process.
+Open `https://ondemand.sherlock.stanford.edu`, choose the development `Herdr` app, and submit these values: session `sherlock-smoke`, agents `Both`, workspace `$HOME`, partition `russpold`, 2 CPUs, 8 GB, and 1 hour. Record the Slurm job ID shown on the session card. Do not substitute a login-node Herdr process.
 
 Expected: job reaches `RUNNING`, the registry record exists with mode `0600`, the runtime directory is `0700`, and `herdr status server --json` succeeds inside the allocation.
 

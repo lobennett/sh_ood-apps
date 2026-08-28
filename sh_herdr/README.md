@@ -120,11 +120,11 @@ and supported native agent sessions from shared home storage. The selected
 workspace is used to create the initial workspace only when that named session
 has no workspace yet.
 
-Only one active allocation may own a name. Startup fails when a second job
-uses the same active name; choose a different name for concurrent allocations.
-A lock is reclaimed only after Slurm confirms that its recorded job has ended,
-so an apparently stale name should not be removed manually while its job may
-still be running.
+Only one active allocation may own a name. Startup identifies the owning Slurm
+job and fails when a second job uses the same active name; choose a different
+name for concurrent allocations. A lock is reclaimed only after Slurm confirms
+that its recorded job has ended, so an apparently stale name should not be
+removed manually while its job may still be running.
 
 ## State, logs, and troubleshooting
 
