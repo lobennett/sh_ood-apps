@@ -467,6 +467,7 @@ bash "$test_dir/test_runtime.bash"
 bash "$test_dir/test_helpers.bash"
 bash "$test_dir/test_setup.bash"
 ruby "$test_dir/test_templates.rb"
+bash "$test_dir/test_lifecycle.bash"
 ```
 
 If `shellcheck` exists, run it against every regular shell file under `sh_herdr/bin`, `sh_herdr/lib`, `sh_herdr/template`, and `sh_herdr/test`, excluding ERB files. If it is absent, print a single skip line.
