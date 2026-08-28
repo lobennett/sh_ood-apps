@@ -73,6 +73,8 @@ Herdr keeps durable session data in the shared home directory. Its live Unix soc
 
 For Herdr 0.8.2, every lifecycle and attachment invocation sets both `HERDR_SESSION` and `HERDR_SOCKET_PATH` and omits the explicit `--session` flag. Herdr resolves `--session` before the socket override; the environment-only form therefore preserves the logical named session while forcing the live socket onto the compute node's private runtime directory.
 
+Lifecycle scripts invoke `${SHERLOCK_HERDR_BIN:-$HOME/.local/bin/herdr}` explicitly rather than relying on `PATH`, because Sherlock's `module reset` removes `$HOME/.local/bin`. The override exists for testing and non-default installations and is not exposed in the OnDemand form.
+
 The registry contains no credentials. The local helper supplies only a job ID; the trusted remote helper reads the session name from the registry.
 
 ## User form
