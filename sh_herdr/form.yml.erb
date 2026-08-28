@@ -1,0 +1,84 @@
+cluster: "sherlock"
+
+form:
+  - herdr_session
+  - herdr_agents
+  - sh_workspace
+  - bc_queue
+  - sh_cpus
+  - sh_mem
+  - bc_num_hours
+  - sh_modules
+  - sh_preexec
+  - bc_email_on_started
+
+attributes:
+  herdr_session:
+    label: "Herdr session"
+    help: "Reuse this name to restore a previous Herdr workspace."
+    required: true
+    value: "sherlock"
+
+  herdr_agents:
+    label: "Agent environment"
+    widget: select
+    required: true
+    value: "both"
+    options:
+      - ["Both", "both"]
+      - ["Claude", "claude"]
+      - ["Codex", "codex"]
+      - ["None", "none"]
+
+  sh_workspace:
+    label: "Initial workspace"
+    help: "Choose the directory used for Herdr's initial workspace."
+    required: true
+    data-filepicker: true
+    data-target-file-type: dirs
+    data-default-directory: '$HOME'
+    readonly: true
+    value: '$HOME'
+
+  bc_queue:
+    label: "Partition"
+    widget: select
+    required: true
+    value: "russpold"
+    options:
+      - ["russpold", "russpold"]
+      - ["normal", "normal"]
+
+  sh_cpus:
+    label: "CPUs"
+    widget: number_field
+    required: true
+    min: 1
+    value: 8
+
+  sh_mem:
+    label: "Memory (GB)"
+    widget: number_field
+    required: true
+    min: 1
+    value: 32
+
+  bc_num_hours:
+    label: "Runtime (hours)"
+    widget: number_field
+    required: true
+    min: 1
+    value: 8
+
+  sh_modules:
+    label: "Additional modules (optional)"
+    help: "Space-separated modules to load after the selected agent modules."
+
+  sh_preexec:
+    widget: text_area
+    label: "Advanced initialization commands (optional)"
+    help: "Advanced: these commands execute as you in bash. Errors can prevent startup."
+
+  bc_email_on_started:
+    widget: check_box
+    label: "Email me when the session starts"

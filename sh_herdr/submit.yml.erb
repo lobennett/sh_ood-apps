@@ -1,0 +1,14 @@
+batch_connect:
+  template: basic
+  conn_params:
+    - herdr_session
+    - herdr_workspace
+
+script:
+  native:
+    - "-N"
+    - "1"
+    - "-c"
+    - "<%= sh_cpus.blank? ? 8 : sh_cpus.to_i %>"
+    - "--mem"
+    - "<%= sh_mem.blank? ? 32 : sh_mem.to_i %>G"

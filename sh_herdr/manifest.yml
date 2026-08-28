@@ -1,0 +1,7 @@
+---
+name: Herdr
+category: Interactive Apps
+subcategory: Development
+role: batch_connect
+description: |
+  Launch a persistent agent workspace on a Sherlock compute node with Herdr.
