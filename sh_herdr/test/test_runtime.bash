@@ -99,13 +99,16 @@ assert_success "idempotent owner cleanup" release_job_state sherlock 54321
 
 runtime_job_id=$$
 runtime_dir=$(expected_runtime_dir "$runtime_job_id")
+other_runtime_dir="$test_root/runtime"
 if [[ -e $runtime_dir || -L $runtime_dir ]]; then
   printf 'FAIL: test runtime directory already exists: %s\n' "$runtime_dir" >&2
   exit 1
 fi
 mkdir -p "$runtime_dir"
-assert_failure "reject different runtime directory" remove_runtime_dir "$runtime_job_id" "$test_root/runtime"
+mkdir -p "$other_runtime_dir"
+assert_failure "reject different runtime directory" remove_runtime_dir "$runtime_job_id" "$other_runtime_dir"
 assert_success "remove expected runtime directory" remove_runtime_dir "$runtime_job_id" "$runtime_dir"
 assert_failure "expected runtime directory removed" test -e "$runtime_dir"
+assert_success "different runtime directory remains" test -d "$other_runtime_dir"
 
 finish_tests

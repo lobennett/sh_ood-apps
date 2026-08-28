@@ -1,0 +1,141 @@
+<%
+require "shellwords"
+
+session = context.herdr_session.to_s
+workspace = context.sh_workspace.to_s
+workspace = "$HOME" if workspace.blank?
+optional_modules = Shellwords.shellsplit(context.sh_modules.to_s)
+runtime_library = File.expand_path("../lib/runtime.sh", File.dirname(__FILE__))
+%>
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+module reset
+module load system git
+case <%= Shellwords.escape(context.herdr_agents.to_s) %> in
+  both) module load claude-code codex ;;
+  claude) module load claude-code ;;
+  codex) module load codex ;;
+  none) ;;
+  *) printf 'Invalid agent environment\n' >&2; exit 2 ;;
+esac
+<% unless optional_modules.empty? -%>
+module load <%= optional_modules.map { |name| Shellwords.escape(name) }.join(" ") %>
+<% end -%>
+<% unless context.sh_preexec.blank? -%>
+<%= context.sh_preexec %>
+<% end -%>
+
+source <%= Shellwords.escape(runtime_library) %>
+
+session=<%= Shellwords.escape(session) %>
+workspace=<%= Shellwords.escape(workspace) %>
+job_id=${SLURM_JOB_ID:-}
+
+if [[ $workspace == '$HOME' ]]; then
+  workspace=$HOME
+fi
+
+validate_session_name "$session" || {
+  printf 'Invalid Herdr session name\n' >&2
+  exit 2
+}
+validate_job_id "$job_id" || {
+  printf 'SLURM_JOB_ID must be numeric\n' >&2
+  exit 2
+}
+[[ -d $workspace ]] || {
+  printf 'Initial workspace is not a directory: %s\n' "$workspace" >&2
+  exit 2
+}
+
+command -v herdr >/dev/null || {
+  printf 'herdr is not available after module initialization\n' >&2
+  exit 2
+}
+case <%= Shellwords.escape(context.herdr_agents.to_s) %> in
+  both)
+    command -v claude >/dev/null
+    command -v codex >/dev/null
+    ;;
+  claude) command -v claude >/dev/null ;;
+  codex) command -v codex >/dev/null ;;
+  none) ;;
+esac
+
+runtime_dir=$(expected_runtime_dir "$job_id")
+socket=$(expected_socket_path "$job_id")
+if [[ -e $runtime_dir || -L $runtime_dir ]]; then
+  printf 'Runtime directory already exists: %s\n' "$runtime_dir" >&2
+  exit 1
+fi
+umask 077
+mkdir -m 700 "$runtime_dir"
+
+server_pid=
+cleanup_started=0
+cleanup() {
+  if (( cleanup_started )); then
+    return 0
+  fi
+  cleanup_started=1
+
+  HERDR_SOCKET_PATH="$socket" herdr --session "$session" server stop >/dev/null 2>&1 || true
+  if [[ ${server_pid:-} =~ ^[0-9]+$ ]] && kill -0 "$server_pid" 2>/dev/null; then
+    for _ in {1..20}; do
+      kill -0 "$server_pid" 2>/dev/null || break
+      sleep 0.25
+    done
+    if kill -0 "$server_pid" 2>/dev/null; then
+      kill "$server_pid" 2>/dev/null || true
+    fi
+    wait "$server_pid" 2>/dev/null || true
+  fi
+  release_job_state "$session" "$job_id" || true
+  remove_runtime_dir "$job_id" "$runtime_dir" || true
+}
+trap 'status=$?; cleanup; exit "$status"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+acquire_session_lock "$session" "$job_id"
+write_job_record "$job_id" "$session" "$socket" "${SLURMD_NODENAME:-$(hostname)}"
+
+cd "$workspace"
+rm -f "$PWD/herdr-ready"
+HERDR_SOCKET_PATH="$socket" herdr --session "$session" server >"$PWD/herdr-server.log" 2>&1 &
+server_pid=$!
+
+ready=0
+deadline=$((SECONDS + 120))
+while (( SECONDS < deadline )); do
+  if HERDR_SOCKET_PATH="$socket" herdr --session "$session" status server --json >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
+  if ! kill -0 "$server_pid" 2>/dev/null; then
+    printf 'Herdr server exited before becoming ready.\n' >&2
+    cat "$PWD/herdr-server.log" >&2 || true
+    exit 1
+  fi
+  sleep 2
+done
+
+if (( ! ready )); then
+  printf 'Timed out waiting for Herdr server readiness.\n' >&2
+  cat "$PWD/herdr-server.log" >&2 || true
+  exit 1
+fi
+
+workspace_list=$(HERDR_SOCKET_PATH="$socket" herdr --session "$session" workspace list)
+if [[ $workspace_list != *workspace_id* ]]; then
+  HERDR_SOCKET_PATH="$socket" herdr --session "$session" workspace create \
+    --cwd "$workspace" --label "$(basename "$workspace")" --no-focus
+fi
+
+touch "$PWD/herdr-ready"
+if ! wait "$server_pid"; then
+  cat "$PWD/herdr-server.log" >&2 || true
+  exit 1
+fi

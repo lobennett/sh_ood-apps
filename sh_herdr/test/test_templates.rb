@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require "erb"
+require "open3"
 require "yaml"
 require "minitest/autorun"
 
@@ -19,7 +20,7 @@ end
 class TemplateBinding
   attr_accessor :herdr_session, :herdr_agents, :herdr_workspace, :sh_workspace,
                 :bc_queue, :sh_cpus, :sh_mem, :bc_num_hours, :sh_modules,
-                :sh_preexec, :bc_email_on_started
+                :sh_preexec, :bc_email_on_started, :job_id
 
   def initialize(values = {})
     @herdr_session = values.fetch(:herdr_session, "sherlock")
@@ -33,10 +34,19 @@ class TemplateBinding
     @sh_modules = values.fetch(:sh_modules, "")
     @sh_preexec = values.fetch(:sh_preexec, "")
     @bc_email_on_started = values.fetch(:bc_email_on_started, false)
+    @job_id = values.fetch(:job_id, "12345")
   end
 
   def get_binding
     binding
+  end
+
+  def context
+    self
+  end
+
+  def session
+    self
   end
 end
 
@@ -45,7 +55,9 @@ class TemplateTest < Minitest::Test
 
   def render(template, values = {})
     path = File.join(APP_ROOT, template)
-    ERB.new(File.read(path)).result(TemplateBinding.new(values).get_binding)
+    renderer = ERB.new(File.read(path), trim_mode: "-")
+    renderer.filename = path
+    renderer.result(TemplateBinding.new(values).get_binding)
   end
 
   def test_form_defaults_and_partition_options
@@ -117,5 +129,54 @@ class TemplateTest < Minitest::Test
     }, form.dig("attributes", "sh_workspace"))
     assert_includes form.dig("attributes", "sh_preexec", "label"), "Advanced"
     assert_includes form.dig("attributes", "sh_preexec", "help"), "execute as the user"
+  end
+
+  def test_lifecycle_templates_render_a_private_persistent_session
+    values = {
+      herdr_session: "sherlock",
+      herdr_agents: "both",
+      sh_workspace: "/home/users/test/work"
+    }
+
+    before_script = render("sh_herdr/template/before.sh.erb", values)
+    job_script = render("sh_herdr/template/script.sh.erb", values)
+    after_script = render("sh_herdr/template/after.sh.erb", values)
+    view = File.read(File.join(APP_ROOT, "sh_herdr/view.html.erb"))
+
+    assert_includes before_script, "export herdr_session=sherlock"
+    assert_includes before_script, "export herdr_workspace=/home/users/test/work"
+    assert_includes job_script, "module load claude-code codex"
+    assert_includes job_script, "HERDR_SOCKET_PATH"
+    assert_includes job_script, "herdr --session"
+    assert_includes job_script, "source #{File.join(APP_ROOT, "sh_herdr/lib/runtime.sh")}"
+    assert_includes after_script, "herdr-ready"
+    assert_includes view, "sherlock-herdr"
+    assert_includes view, "session.job_id"
+    refute_includes view, "/rnode/"
+  end
+
+  def test_rendered_scripts_escape_form_values_without_disabling_raw_initialization
+    values = {
+      herdr_session: "sherlock; touch session-pwned",
+      herdr_agents: "both; touch agent-pwned",
+      sh_workspace: "/home/users/test/work; touch workspace-pwned",
+      sh_modules: "safe-module; touch module-pwned",
+      sh_preexec: "printf 'intentional raw initialization\\n'"
+    }
+
+    before_script = render("sh_herdr/template/before.sh.erb", values)
+    job_script = render("sh_herdr/template/script.sh.erb", values)
+
+    assert_includes before_script, "sherlock\\;\\ touch\\ session-pwned"
+    assert_includes before_script, "workspace-pwned"
+    assert_includes job_script, "both\\;\\ touch\\ agent-pwned"
+    assert_includes job_script, "safe-module\\; touch"
+    assert_includes job_script, "printf 'intentional raw initialization"
+    _output, status = Open3.capture2("bash", "-n", stdin_data: "#{before_script}\n#{job_script}")
+    assert status.success?, "rendered lifecycle shell must parse"
+
+    view = render("sh_herdr/view.html.erb", values.merge(job_id: "42<unsafe"))
+    assert_includes view, "42&lt;unsafe"
+    refute_includes view, "42<unsafe"
   end
 end

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+for _ in {1..120}; do
+  [[ -f "$PWD/herdr-ready" ]] && exit 0
+  sleep 1
+done
+
+printf 'Timed out waiting for Herdr startup.\n' >&2
+cat "$PWD/herdr-server.log" >&2 || true
+clean_up 1

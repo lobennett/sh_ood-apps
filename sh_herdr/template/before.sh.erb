@@ -1,0 +1,9 @@
+<%
+require "shellwords"
+
+session = context.herdr_session.to_s
+workspace = context.sh_workspace.to_s
+workspace = "$HOME" if workspace.blank?
+%>
+export herdr_session=<%= Shellwords.escape(session) %>
+export herdr_workspace=<%= Shellwords.escape(workspace) %>

@@ -1,0 +1,12 @@
+<h2>Herdr session</h2>
+
+<p>
+  Herdr session <code><%= ERB::Util.html_escape(context.herdr_session.to_s) %></code>
+  is running from <code><%= ERB::Util.html_escape(context.sh_workspace.to_s) %></code>.
+</p>
+
+<p>Attach from your laptop after the job is ready:</p>
+
+<pre><code>sherlock-herdr <%= ERB::Util.html_escape(session.job_id.to_s) %></code></pre>
+
+<p>Detach from Herdr when you are finished for now; the session remains available until the Slurm job ends.</p>
