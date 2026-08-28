@@ -7,4 +7,5 @@ workspace = "$HOME" if workspace.blank?
 %>
 export herdr_session=<%= Shellwords.escape(session) %>
 export herdr_workspace=<%= Shellwords.escape(workspace) %>
+export herdr_job_id="${SLURM_JOB_ID:-}"
 export herdr_staging_dir="$PWD"

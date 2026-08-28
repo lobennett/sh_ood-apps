@@ -2,6 +2,7 @@
 
 require "erb"
 require "open3"
+require "ostruct"
 require "yaml"
 require "minitest/autorun"
 
@@ -20,7 +21,7 @@ end
 class TemplateBinding
   attr_accessor :herdr_session, :herdr_agents, :herdr_workspace, :sh_workspace,
                 :bc_queue, :sh_cpus, :sh_mem, :bc_num_hours, :sh_modules,
-                :sh_preexec, :bc_email_on_started, :job_id
+                :sh_preexec, :bc_email_on_started, :herdr_job_id
 
   def initialize(values = {})
     @herdr_session = values.fetch(:herdr_session, "sherlock")
@@ -34,7 +35,7 @@ class TemplateBinding
     @sh_modules = values.fetch(:sh_modules, "")
     @sh_preexec = values.fetch(:sh_preexec, "")
     @bc_email_on_started = values.fetch(:bc_email_on_started, false)
-    @job_id = values.fetch(:job_id, "12345")
+    @herdr_job_id = values.fetch(:herdr_job_id, "12345")
   end
 
   def get_binding
@@ -58,6 +59,13 @@ class TemplateTest < Minitest::Test
     renderer = ERB.new(File.read(path), trim_mode: "-")
     renderer.filename = path
     renderer.result(TemplateBinding.new(values).get_binding)
+  end
+
+  def render_connection_view(values = {})
+    path = File.join(APP_ROOT, "sh_herdr/view.html.erb")
+    renderer = ERB.new(File.read(path), trim_mode: "-")
+    renderer.filename = path
+    renderer.result(OpenStruct.new(values).instance_eval { binding })
   end
 
   def test_job_template_is_executable_by_open_ondemand
@@ -100,7 +108,7 @@ class TemplateTest < Minitest::Test
   def test_submit_template_uses_basic_connection_and_resources
     submit = YAML.safe_load(render("sh_herdr/submit.yml.erb", sh_cpus: "12", sh_mem: "48"))
     assert_equal "basic", submit.dig("batch_connect", "template")
-    assert_equal %w[herdr_session herdr_workspace], submit.dig("batch_connect", "conn_params")
+    assert_equal %w[herdr_session herdr_workspace herdr_job_id], submit.dig("batch_connect", "conn_params")
     assert_equal ["-N", "1", "-c", "12", "--mem", "48G"], submit.dig("script", "native")
     refute_includes submit.dig("script", "native"), "-p"
     refute_includes submit.dig("script", "native"), "--partition"
@@ -165,6 +173,7 @@ class TemplateTest < Minitest::Test
 
     assert_includes before_script, "export herdr_session=sherlock"
     assert_includes before_script, "export herdr_workspace=/home/users/test/work"
+    assert_includes before_script, 'export herdr_job_id="${SLURM_JOB_ID:-}"'
     assert_includes before_script, "export herdr_staging_dir=\"$PWD\""
     assert_includes job_script, "module load claude-code codex"
     assert_includes job_script, "HERDR_SESSION"
@@ -179,7 +188,7 @@ class TemplateTest < Minitest::Test
     assert_includes after_script, "herdr-ready"
     assert_includes after_script, "herdr_staging_dir"
     assert_includes view, "sherlock-herdr"
-    assert_includes view, "session.job_id"
+    assert_includes view, "herdr_job_id.to_s"
     refute_includes view, "/rnode/"
     refute_match(/<form|https?:\/\/|password/i, view)
   end
@@ -204,22 +213,22 @@ class TemplateTest < Minitest::Test
     _output, status = Open3.capture2("bash", "-n", stdin_data: "#{before_script}\n#{job_script}")
     assert status.success?, "rendered lifecycle shell must parse"
 
-    view = render("sh_herdr/view.html.erb", values.merge(job_id: "42<unsafe"))
+    view = render("sh_herdr/view.html.erb", values.merge(herdr_job_id: "42<unsafe"))
     assert_includes view, "42&lt;unsafe"
     refute_includes view, "42<unsafe"
   end
 
   def test_view_escapes_all_display_values_and_includes_one_time_setup_instruction
-    view = render(
-      "sh_herdr/view.html.erb",
+    view = render_connection_view(
       herdr_session: "session<unsafe",
-      sh_workspace: "/work/<unsafe",
-      job_id: "42<unsafe"
+      herdr_workspace: "/work/<unsafe",
+      herdr_job_id: "42<unsafe"
     )
 
     assert_includes view, "session&lt;unsafe"
     assert_includes view, "/work/&lt;unsafe"
     assert_includes view, "42&lt;unsafe"
+    assert_includes view, "sherlock-herdr 42&lt;unsafe"
     assert_includes view, "setup"
     refute_match(/<form|\/rnode\/|https?:\/\/|password/i, view)
   end

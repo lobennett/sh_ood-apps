@@ -207,6 +207,9 @@ chmod +x "$before_script" "$job_script" "$after_script"
 assert_success "rendered before script parses" bash -n "$before_script"
 assert_success "rendered job script parses" bash -n "$job_script"
 assert_success "rendered after script parses" bash -n "$after_script"
+assert_success "before hook exports app-scoped Slurm job id without clobbering caller state" \
+  env SLURM_JOB_ID=12345 bash -c 'job_id=preserved; source "$1"; [[ $herdr_job_id == 12345 && $job_id == preserved ]]' \
+    _ "$before_script"
 assert_failure "Herdr is absent from the lifecycle PATH" env PATH="$fake_bin:/usr/bin:/bin" command -v herdr
 
 duplicate_job_id=$(( 600000 + $$ ))
