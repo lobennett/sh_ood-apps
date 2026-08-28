@@ -714,7 +714,7 @@ Expected: both commands resolve, the same workspace returns, and the allocation 
 
 - [ ] **Step 4: Verify duplicate-session protection and restoration**
 
-While the first job owns session `sherlock-smoke`, submit a second short job with the same name and confirm it fails with the owning job ID. End the first allocation, start a new one with session `sherlock-smoke`, and confirm Herdr restores its workspace state. Use `sherlock-smoke-2` once to confirm independent allocations remain possible.
+While the first job owns session `sherlock-smoke`, submit a second short job with the same name and confirm startup fails without disturbing the first allocation. End the first allocation, start a new one with session `sherlock-smoke`, and confirm Herdr restores its workspace state. Use `sherlock-smoke-2` once to confirm independent allocations remain possible.
 
 - [ ] **Step 5: Complete the authenticated browser check**
 
