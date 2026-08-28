@@ -97,7 +97,6 @@ fi
 umask 077
 mkdir -m 700 "$runtime_dir"
 
-server_pid=
 cleanup_started=0
 cleanup() {
   local original_status=${1:-0}
@@ -109,23 +108,6 @@ cleanup() {
   trap '' INT TERM
 
   HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" server stop >/dev/null 2>&1 || true
-  if [[ ${server_pid:-} =~ ^[0-9]+$ ]] && kill -0 "$server_pid" 2>/dev/null; then
-    for _ in {1..20}; do
-      kill -0 "$server_pid" 2>/dev/null || break
-      sleep 0.25
-    done
-    if kill -0 "$server_pid" 2>/dev/null; then
-      kill -TERM "$server_pid" 2>/dev/null || true
-    fi
-    for _ in {1..20}; do
-      kill -0 "$server_pid" 2>/dev/null || break
-      sleep 0.25
-    done
-    if kill -0 "$server_pid" 2>/dev/null; then
-      kill -KILL "$server_pid" 2>/dev/null || true
-    fi
-    wait "$server_pid" 2>/dev/null || true
-  fi
   release_job_state "$session" "$job_id" || true
   remove_runtime_dir "$job_id" "$runtime_dir" || true
   return "$original_status"
@@ -153,8 +135,11 @@ write_job_record "$job_id" "$session" "$socket" "${SLURMD_NODENAME:-$(hostname)}
 
 cd "$workspace"
 rm -f "$ready_marker"
-HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" server >"$server_log" 2>&1 &
-server_pid=$!
+if ! HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" server >"$server_log" 2>&1; then
+  printf 'Herdr server failed to start.\n' >&2
+  cat "$server_log" >&2 || true
+  exit 1
+fi
 
 ready=0
 deadline=$((SECONDS + 120))
@@ -164,8 +149,8 @@ while (( SECONDS < deadline )); do
     ready=1
     break
   fi
-  if ! kill -0 "$server_pid" 2>/dev/null; then
-    printf 'Herdr server exited before becoming ready.\n' >&2
+  if [[ ! ( $status_json == \{* && $status_json == *\} && ( $status_json == *'"running":false,'* || $status_json == *'"running":false}' ) ) ]]; then
+    printf 'Herdr returned an invalid readiness response.\n' >&2
     cat "$server_log" >&2 || true
     exit 1
   fi
@@ -185,7 +170,11 @@ if [[ $workspace_list != *workspace_id* ]]; then
 fi
 
 touch "$ready_marker"
-if ! wait "$server_pid"; then
-  cat "$server_log" >&2 || true
-  exit 1
-fi
+while sleep 5; do
+  status_json=$(HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" status server --json 2>>"$server_log") || status_json=
+  if [[ ! ( $status_json == \{* && $status_json == *\} && ( $status_json == *'"running":true,'* || $status_json == *'"running":true}' ) ) ]]; then
+    printf 'Herdr server stopped while the Slurm job was active.\n' >&2
+    cat "$server_log" >&2 || true
+    exit 1
+  fi
+done
