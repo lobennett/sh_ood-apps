@@ -153,8 +153,8 @@ class TemplateTest < Minitest::Test
     assert_includes job_script, '[[ -x $herdr_bin ]]'
     refute_includes job_script, "command -v herdr"
     refute_includes job_script, "--session"
-    assert_includes job_script, "JSON.parse"
-    assert_includes job_script, 'fetch("running") == true'
+    assert_includes job_script, '[[ $status_json == *\'"running":true\'* ]]'
+    refute_match(/\bruby\b/, job_script)
     assert_includes job_script, "herdr_staging_dir"
     assert_includes job_script, "source #{File.join(APP_ROOT, "sh_herdr/lib/runtime.sh")}"
     assert_includes after_script, "herdr-ready"

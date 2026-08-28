@@ -146,8 +146,7 @@ ready=0
 deadline=$((SECONDS + 120))
 while (( SECONDS < deadline )); do
   status_json=$(HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" status server --json 2>>"$server_log") || status_json=
-  if ruby -rjson -e 'status = JSON.parse(STDIN.read); exit(status.fetch("running") == true ? 0 : 1)' \
-    <<< "$status_json" >/dev/null 2>&1; then
+  if [[ $status_json == *'"running":true'* ]]; then
     ready=1
     break
   fi

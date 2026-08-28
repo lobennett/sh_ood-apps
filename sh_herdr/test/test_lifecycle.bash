@@ -85,6 +85,13 @@ cat > "$fake_bin/codex" <<'EOF'
 exit 0
 EOF
 
+cat > "$fake_bin/ruby" <<'EOF'
+#!/usr/bin/env bash
+printf 'unexpected runtime ruby: %s\n' "$*" >> "${RUBY_LOG:?}"
+printf 'ruby: command not found\n' >&2
+exit 127
+EOF
+
 cat > "$home_herdr_bin" <<'EOF'
 #!/usr/bin/env bash
 set -u
@@ -137,7 +144,7 @@ case "${1:-}" in
     ;;
 esac
 EOF
-chmod +x "$fake_bin/module" "$fake_bin/squeue" "$fake_bin/claude" "$fake_bin/codex" "$home_herdr_bin"
+chmod +x "$fake_bin/module" "$fake_bin/squeue" "$fake_bin/claude" "$fake_bin/codex" "$fake_bin/ruby" "$home_herdr_bin"
 
 wait_for_file() {
   local path=$1
@@ -160,7 +167,7 @@ run_job() {
     source "$before_script"
     export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root"
     export SLURM_JOB_ID="$job_id" HERDR_READY_MODE="$mode"
-    export MODULE_LOG="$test_root/module.log" HERDR_LOG="$test_root/herdr.log"
+    export MODULE_LOG="$test_root/module.log" HERDR_LOG="$test_root/herdr.log" RUBY_LOG="$test_root/runtime-ruby.log"
     export FAKE_SERVER_PID_FILE="$test_root/server-${job_id}.pid"
     export FAKE_STATUS_COUNT_FILE="$test_root/status-${job_id}.count"
     if [[ -n $herdr_override ]]; then
@@ -202,6 +209,7 @@ assert_success "server log records fake server" rg -q "fake server started" "$st
 assert_success "all lifecycle calls select session and socket from environment" \
   rg -q "^sherlock\|$runtime_dir/herdr.sock\|server$" "$test_root/herdr.log"
 assert_failure "lifecycle calls omit explicit session selector" rg -q -- "--session" "$test_root/herdr.log"
+assert_failure "rendered lifecycle does not invoke unavailable Ruby" test -e "$test_root/runtime-ruby.log"
 assert_success "readiness polled false then true" test "$(< "$test_root/status-${job_id}.count")" -ge 2
 if [[ -f $staging_dir/herdr-ready ]]; then
   assert_success "after hook finds exported staging marker from another directory" \
@@ -242,7 +250,7 @@ render_template "template/script.sh.erb" "$malformed_job" watson none "$malforme
   source "$malformed_before"
   export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root"
   export SLURM_JOB_ID="$((job_id + 1))" HERDR_READY_MODE=malformed
-  export MODULE_LOG="$test_root/malformed-module.log" HERDR_LOG="$test_root/malformed-herdr.log"
+  export MODULE_LOG="$test_root/malformed-module.log" HERDR_LOG="$test_root/malformed-herdr.log" RUBY_LOG="$test_root/malformed-ruby.log"
   export SHERLOCK_HERDR_BIN="$override_herdr_bin" OVERRIDE_LOG="$test_root/override-herdr.log"
   export FAKE_SERVER_PID_FILE="$test_root/server-malformed.pid"
   export FAKE_STATUS_COUNT_FILE="$test_root/status-malformed.count"
@@ -262,7 +270,7 @@ mv "$fake_bin/claude" "$fake_bin/claude.disabled"
   cd "$staging_dir"
   source "$missing_agent_before"
   export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root" SLURM_JOB_ID="$((job_id + 2))"
-  export MODULE_LOG="$test_root/missing-agent-module.log" HERDR_LOG="$test_root/missing-agent-herdr.log"
+  export MODULE_LOG="$test_root/missing-agent-module.log" HERDR_LOG="$test_root/missing-agent-herdr.log" RUBY_LOG="$test_root/missing-agent-ruby.log"
   export FAKE_SERVER_PID_FILE="$test_root/server-missing-agent.pid"
   export FAKE_STATUS_COUNT_FILE="$test_root/status-missing-agent.count"
   bash "$missing_agent_job"
@@ -283,7 +291,7 @@ assert_success "injection rendered job shell parses" bash -n "$injection_job"
   cd "$staging_dir"
   source "$injection_before"
   export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root" SLURM_JOB_ID="$((job_id + 3))"
-  export MODULE_LOG="$test_root/injection-module.log" HERDR_LOG="$test_root/injection-herdr.log"
+  export MODULE_LOG="$test_root/injection-module.log" HERDR_LOG="$test_root/injection-herdr.log" RUBY_LOG="$test_root/injection-ruby.log"
   export FAKE_SERVER_PID_FILE="$test_root/server-injection.pid"
   export FAKE_STATUS_COUNT_FILE="$test_root/status-injection.count"
   bash "$injection_job"
