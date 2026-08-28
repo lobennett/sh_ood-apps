@@ -60,6 +60,12 @@ class TemplateTest < Minitest::Test
     renderer.result(TemplateBinding.new(values).get_binding)
   end
 
+  def test_job_template_is_executable_by_open_ondemand
+    template = File.join(APP_ROOT, "sh_herdr/template/script.sh.erb")
+
+    assert File.executable?(template), "Open OnDemand executes the staged job template directly"
+  end
+
   def test_form_defaults_and_partition_options
     form = YAML.safe_load(render("sh_herdr/form.yml.erb"))
     assert_equal "sherlock", form.fetch("cluster")
