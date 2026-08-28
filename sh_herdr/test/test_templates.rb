@@ -229,7 +229,9 @@ class TemplateTest < Minitest::Test
     assert_includes view, "/work/&lt;unsafe"
     assert_includes view, "42&lt;unsafe"
     assert_includes view, "sherlock-herdr 42&lt;unsafe"
-    assert_includes view, "setup"
+    assert_includes view, "bash ~/src/sh_ood-apps/sh_herdr/bin/setup"
+    assert_includes view, "scp sherlock:~/src/sh_ood-apps/sh_herdr/bin/sherlock-herdr ~/.local/bin/"
+    assert_includes view, "On your laptop"
     refute_match(/<form|\/rnode\/|https?:\/\/|password/i, view)
   end
 end
