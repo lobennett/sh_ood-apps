@@ -344,6 +344,7 @@ git commit -m "feat: add Herdr Open OnDemand job form"
 - Create: `sh_herdr/template/script.sh.erb`
 - Create: `sh_herdr/template/after.sh.erb`
 - Create: `sh_herdr/view.html.erb`
+- Create: `sh_herdr/test/test_lifecycle.bash`
 - Modify: `sh_herdr/test/test_templates.rb`
 - Modify: `sh_herdr/test/test_runtime.bash`
 
@@ -376,6 +377,7 @@ Run:
 
 ```bash
 ruby sh_herdr/test/test_templates.rb
+bash sh_herdr/test/test_lifecycle.bash
 bash sh_herdr/test/test_runtime.bash
 ```
 
