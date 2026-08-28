@@ -247,8 +247,11 @@ assert_failure "lifecycle calls omit explicit session selector" rg -q -- "--sess
 assert_failure "rendered lifecycle does not invoke unavailable Ruby" test -e "$test_root/runtime-ruby.log"
 assert_success "readiness polled false then true" test "$(< "$test_root/status-${job_id}.count")" -ge 2
 if [[ -f $staging_dir/herdr-ready ]]; then
+  after_hook_continued="$test_root/after-hook-continued"
   assert_success "after hook finds exported staging marker from another directory" \
-    env herdr_staging_dir="$staging_dir" bash -c 'cd "$1" && bash "$2"' _ "$workspace_dir" "$after_script"
+    env herdr_staging_dir="$staging_dir" bash -c 'cd "$1"; source "$2"; touch "$3"' \
+      _ "$workspace_dir" "$after_script" "$after_hook_continued"
+  assert_success "sourced after hook returns control to Open OnDemand" test -f "$after_hook_continued"
 else
   printf 'FAIL: after hook requires a staging readiness marker\n' >&2
   TEST_FAILURES=$((TEST_FAILURES + 1))

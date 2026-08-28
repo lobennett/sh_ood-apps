@@ -11,10 +11,12 @@ ready_marker="$staging_dir/herdr-ready"
 server_log="$staging_dir/herdr-server.log"
 
 for _ in {1..120}; do
-  [[ -f $ready_marker ]] && exit 0
+  [[ -f $ready_marker ]] && break
   sleep 1
 done
 
-printf 'Timed out waiting for Herdr startup.\n' >&2
-cat "$server_log" >&2 || true
-clean_up 1
+if [[ ! -f $ready_marker ]]; then
+  printf 'Timed out waiting for Herdr startup.\n' >&2
+  cat "$server_log" >&2 || true
+  clean_up 1
+fi
