@@ -71,6 +71,8 @@ The state directory has mode `0700`, and its files have mode `0600`. A job recor
 
 Herdr keeps durable session data in the shared home directory. Its live Unix socket resides in a private directory under `/tmp` on the allocated compute node. This avoids placing a Unix socket on Sherlock's shared home filesystem. The registry gives the attachment helper the exact socket path, and cleanup removes the node-local directory when the allocation ends.
 
+For Herdr 0.8.2, every lifecycle and attachment invocation sets both `HERDR_SESSION` and `HERDR_SOCKET_PATH` and omits the explicit `--session` flag. Herdr resolves `--session` before the socket override; the environment-only form therefore preserves the logical named session while forcing the live socket onto the compute node's private runtime directory.
+
 The registry contains no credentials. The local helper supplies only a job ID; the trusted remote helper reads the session name from the registry.
 
 ## User form
@@ -102,7 +104,7 @@ The agent choices map to Sherlock's `claude-code` and `codex` modules. The imple
 5. The job confirms that `herdr` and every selected agent CLI are executable.
 6. The job creates a private node-local runtime directory and Unix socket path.
 7. The job writes its registry entry atomically and starts the named Herdr server from the selected workspace.
-8. The startup hook polls Herdr's local status interface. Open OnDemand marks the session ready only after Herdr responds.
+8. The startup hook polls Herdr's local status interface and parses its JSON, requiring `running: true`. Open OnDemand marks the session ready only after that predicate succeeds. The marker and server log use absolute paths rooted in the Batch Connect staging directory captured before the job enters the workspace.
 9. The connection view shows the Slurm job ID, Herdr session name, initial workspace, and the command `sherlock-herdr <job-id>`.
 
 The Batch Connect configuration passes the validated session name through a custom connection parameter. The view reads the scheduler job ID from Open OnDemand's session object. The app does not allocate a TCP port.
