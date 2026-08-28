@@ -36,6 +36,7 @@ The obsolete `~/ondemand/dev/sh_cursor` and `~/ondemand/dev/on_demand_containers
 ```text
 sh_herdr/
 ├── README.md
+├── form.js -> ../_common/form.js
 ├── form.yml.erb
 ├── manifest.yml
 ├── submit.yml.erb
@@ -66,7 +67,9 @@ The app stores runtime metadata under:
 └── sessions/<session-name>/
 ```
 
-The state directory has mode `0700`, and its files have mode `0600`. A job record maps a numeric Slurm job ID to a validated Herdr session name. A session directory acts as an atomic lock and records the owning job, hostname, and server process.
+The state directory has mode `0700`, and its files have mode `0600`. A job record maps a numeric Slurm job ID to a validated Herdr session name and node-local socket path. A session directory acts as an atomic lock and records the owning job, hostname, and server process.
+
+Herdr keeps durable session data in the shared home directory. Its live Unix socket resides in a private directory under `/tmp` on the allocated compute node. This avoids placing a Unix socket on Sherlock's shared home filesystem. The registry gives the attachment helper the exact socket path, and cleanup removes the node-local directory when the allocation ends.
 
 The registry contains no credentials. The local helper supplies only a job ID; the trusted remote helper reads the session name from the registry.
 
@@ -88,7 +91,7 @@ The form exposes these fields:
 
 The app requests one node. It does not expose a GPU field because the initial use case is agent orchestration and software development.
 
-The implementation will map the agent choices to the current Sherlock module identifiers after verifying those identifiers with the module system. It will load agent modules before optional modules and initialization commands, then confirm that every selected CLI is callable.
+The agent choices map to Sherlock's `claude-code` and `codex` modules. The implementation will verify those identifiers with the module system during deployment. It will load agent modules before optional modules and initialization commands, then confirm that every selected CLI is callable.
 
 ## Launch lifecycle
 
@@ -97,9 +100,10 @@ The implementation will map the agent choices to the current Sherlock module ide
 3. The job creates the session lock atomically. If another running job owns the name, startup stops and identifies that job. If the recorded job no longer exists, the job reclaims the stale lock.
 4. The job resets the module environment, loads Herdr's prerequisites and the selected Claude/Codex modules, then applies optional modules and initialization commands.
 5. The job confirms that `herdr` and every selected agent CLI are executable.
-6. The job writes its registry entry atomically and starts the named Herdr server from the selected workspace.
-7. The startup hook polls Herdr's local status interface. Open OnDemand marks the session ready only after Herdr responds.
-8. The connection view shows the Slurm job ID, Herdr session name, initial workspace, and the command `sherlock-herdr <job-id>`.
+6. The job creates a private node-local runtime directory and Unix socket path.
+7. The job writes its registry entry atomically and starts the named Herdr server from the selected workspace.
+8. The startup hook polls Herdr's local status interface. Open OnDemand marks the session ready only after Herdr responds.
+9. The connection view shows the Slurm job ID, Herdr session name, initial workspace, and the command `sherlock-herdr <job-id>`.
 
 The Batch Connect configuration passes the validated session name through a custom connection parameter. The view reads the scheduler job ID from Open OnDemand's session object. The app does not allocate a TCP port.
 
@@ -143,7 +147,8 @@ The batch script traps normal exit and scheduler termination signals. Cleanup:
 1. Stops only the Herdr server process started by the current job.
 2. Removes the job record only if it still identifies the current job.
 3. Removes the session lock only if the current job still owns it.
-4. Leaves Herdr's durable session state intact.
+4. Removes the private node-local runtime directory.
+5. Leaves Herdr's durable session state intact.
 
 The trap must be idempotent so that repeated signals cannot remove another allocation's state.
 
