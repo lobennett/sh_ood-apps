@@ -32,7 +32,8 @@ if (( ${#rows[@]} != 1 )); then
 fi
 
 IFS='|' read -r queued_job queued_owner queued_state extra <<< "${rows[0]}"
-if [[ -n ${extra:-} || $queued_job != "$job_id" || -z $queued_owner || -z $queued_state ]]; then
+separators=${rows[0]//[^|]/}
+if [[ $separators != '||' || -n ${extra:-} || $queued_job != "$job_id" || -z $queued_owner || -z $queued_state ]]; then
   printf 'invalid Slurm record for job %s\n' "$job_id" >&2
   exit 3
 fi
@@ -50,7 +51,8 @@ record=$(read_job_record "$job_id" 2>/dev/null) || {
   exit 4
 }
 IFS=$'\t' read -r session socket host extra <<< "$record"
-if [[ -n ${extra:-} || -z $session || -z $socket || -z $host ]] || ! validate_session_name "$session"; then
+tabs=${record//[^	]/}
+if [[ $record == *$'\n'* || $tabs != $'\t\t' || -n ${extra:-} || -z $session || -z $socket || -z $host ]] || ! validate_session_name "$session"; then
   printf 'invalid Herdr registry record for job %s\n' "$job_id" >&2
   exit 4
 fi

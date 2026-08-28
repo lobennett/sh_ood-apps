@@ -34,6 +34,12 @@ assert_command_fails() {
     printf 'FAIL: %s\n' "$description" >&2; TEST_FAILURES=$((TEST_FAILURES + 1))
   else printf 'PASS: %s\n' "$description"; fi
 }
+assert_exit_code() {
+  local description=$1 expected=$2; shift 2
+  "$@" >/dev/null 2>&1
+  local actual=$?
+  if [[ $actual -eq $expected ]]; then printf 'PASS: %s\n' "$description"; else printf 'FAIL: %s (expected %s, got %s)\n' "$description" "$expected" "$actual" >&2; TEST_FAILURES=$((TEST_FAILURES + 1)); fi
+}
 assert_command_output() {
   local description=$1 expected=$2; shift 2
   local output
@@ -44,6 +50,8 @@ assert_command_output() {
 
 assert_command_fails "missing job id" "$app_root/bin/sherlock-herdr"
 assert_command_fails "malformed job id" "$app_root/bin/sherlock-herdr" '12;uname'
+assert_exit_code "local missing job usage" 2 "$app_root/bin/sherlock-herdr"
+assert_exit_code "remote malformed job usage" 2 "$app_root/bin/sherlock-herdr-attach" '12;uname'
 assert_command_output "ssh command" 'ssh|-tt|sherlock|~/.local/bin/sherlock-herdr-attach|12345' "$app_root/bin/sherlock-herdr" 12345
 
 source "$HOME/.local/libexec/sherlock-herdr/runtime.sh"
@@ -52,14 +60,17 @@ export SQUEUE_OUTPUT="12345|$USER|RUNNING" SRUN_LOG="$test_root/srun.log"
 assert_success "remote attachment" "$app_root/bin/sherlock-herdr-attach" 12345
 assert_eq "srun arguments" '--jobid=12345 --overlap --nodes=1 --ntasks=1 --nodelist=sh03-01n01 --pty env HERDR_SOCKET_PATH=/tmp/sherlock-herdr-'"$UID"'-12345/herdr.sock '"$HOME/.local/bin/herdr"' --session sherlock' "$(<"$SRUN_LOG")"
 
-export SQUEUE_OUTPUT="12345|foreign|RUNNING"; assert_command_fails "foreign owner" "$app_root/bin/sherlock-herdr-attach" 12345
-export SQUEUE_OUTPUT="12345|$USER|PENDING"; assert_command_fails "pending job" "$app_root/bin/sherlock-herdr-attach" 12345
-export SQUEUE_OUTPUT=; assert_command_fails "missing job" "$app_root/bin/sherlock-herdr-attach" 12345
-rm -f "$(job_record_path 12345)"; export SQUEUE_OUTPUT="12345|$USER|RUNNING"; assert_command_fails "missing registry" "$app_root/bin/sherlock-herdr-attach" 12345
+export SQUEUE_OUTPUT="12345|$USER|RUNNING|"; assert_exit_code "malformed Slurm row" 3 "$app_root/bin/sherlock-herdr-attach" 12345
+export SQUEUE_OUTPUT="12345|foreign|RUNNING"; assert_exit_code "foreign owner" 3 "$app_root/bin/sherlock-herdr-attach" 12345
+export SQUEUE_OUTPUT="12345|$USER|PENDING"; assert_exit_code "pending job" 3 "$app_root/bin/sherlock-herdr-attach" 12345
+export SQUEUE_OUTPUT=; assert_exit_code "missing job" 3 "$app_root/bin/sherlock-herdr-attach" 12345
+rm -f "$(job_record_path 12345)"; export SQUEUE_OUTPUT="12345|$USER|RUNNING"; assert_exit_code "missing registry" 4 "$app_root/bin/sherlock-herdr-attach" 12345
 write_job_record 12345 'bad/session' '/tmp/sherlock-herdr-'"$UID"'-12345/herdr.sock' sh03-01n01 2>/dev/null || true
 printf 'bad/session\t/tmp/sherlock-herdr-%s-12345/herdr.sock\tsh03-01n01\n' "$UID" > "$(job_record_path 12345)" 2>/dev/null || true
-assert_command_fails "invalid stored session" "$app_root/bin/sherlock-herdr-attach" 12345
+assert_exit_code "invalid stored session" 4 "$app_root/bin/sherlock-herdr-attach" 12345
 printf 'sherlock\t/tmp/untrusted/herdr.sock\tsh03-01n01\n' > "$(job_record_path 12345)"
-assert_command_fails "socket outside runtime directory" "$app_root/bin/sherlock-herdr-attach" 12345
+assert_exit_code "socket outside runtime directory" 4 "$app_root/bin/sherlock-herdr-attach" 12345
+printf 'sherlock\t/tmp/sherlock-herdr-%s-12345/herdr.sock\tsh03-01n01\ntrailing\n' "$UID" > "$(job_record_path 12345)"
+assert_exit_code "trailing registry content" 4 "$app_root/bin/sherlock-herdr-attach" 12345
 
 finish_tests
