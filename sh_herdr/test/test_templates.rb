@@ -50,22 +50,47 @@ class TemplateTest < Minitest::Test
 
   def test_form_defaults_and_partition_options
     form = YAML.safe_load(render("sh_herdr/form.yml.erb"))
+    assert_equal "sherlock", form.fetch("cluster")
+    assert_equal %w[
+      herdr_session
+      herdr_agents
+      sh_workspace
+      bc_queue
+      sh_cpus
+      sh_mem
+      bc_num_hours
+      sh_modules
+      sh_preexec
+      bc_email_on_started
+    ], form.fetch("form")
     assert_equal "sherlock", form.dig("attributes", "herdr_session", "value")
     assert_equal "both", form.dig("attributes", "herdr_agents", "value")
+    assert_equal [["Both", "both"], ["Claude", "claude"], ["Codex", "codex"], ["None", "none"]],
+                 form.dig("attributes", "herdr_agents", "options")
     assert_equal "russpold", form.dig("attributes", "bc_queue", "value")
     assert_equal [["russpold", "russpold"], ["normal", "normal"]],
                  form.dig("attributes", "bc_queue", "options")
     assert_equal 8, form.dig("attributes", "sh_cpus", "value")
     assert_equal 32, form.dig("attributes", "sh_mem", "value")
     assert_equal 8, form.dig("attributes", "bc_num_hours", "value")
+
+    %w[herdr_session herdr_agents sh_workspace bc_queue sh_cpus sh_mem bc_num_hours].each do |field|
+      assert_equal true, form.dig("attributes", field, "required"), "#{field} must be required"
+    end
   end
 
   def test_submit_template_uses_basic_connection_and_resources
     submit = YAML.safe_load(render("sh_herdr/submit.yml.erb", sh_cpus: "12", sh_mem: "48"))
     assert_equal "basic", submit.dig("batch_connect", "template")
     assert_equal %w[herdr_session herdr_workspace], submit.dig("batch_connect", "conn_params")
-    assert_includes submit.dig("script", "native"), "12"
-    assert_includes submit.dig("script", "native"), "48G"
+    assert_equal ["-N", "1", "-c", "12", "--mem", "48G"], submit.dig("script", "native")
+    refute_includes submit.dig("script", "native"), "-p"
+    refute_includes submit.dig("script", "native"), "--partition"
+    refute_includes submit.dig("script", "native"), "-t"
+    refute_includes submit.dig("script", "native"), "--time"
+
+    defaults = YAML.safe_load(render("sh_herdr/submit.yml.erb"))
+    assert_equal ["-N", "1", "-c", "8", "--mem", "32G"], defaults.dig("script", "native")
   end
 
   def test_manifest_identifies_the_batch_connect_app
@@ -79,9 +104,18 @@ class TemplateTest < Minitest::Test
 
   def test_form_has_only_supported_resource_choices
     form = YAML.safe_load(render("sh_herdr/form.yml.erb"))
-    assert_includes form.fetch("form"), "sh_workspace"
     refute_includes form.fetch("form"), "sh_gpus"
-    assert_equal true, form.dig("attributes", "sh_workspace", "data-filepicker")
-    assert_equal true, form.dig("attributes", "sh_preexec", "label").include?("Advanced")
+    assert_equal({
+      "label" => "Initial workspace",
+      "help" => "Choose the directory used for Herdr's initial workspace.",
+      "required" => true,
+      "data-filepicker" => true,
+      "data-target-file-type" => "dirs",
+      "data-default-directory" => "$HOME",
+      "readonly" => true,
+      "value" => "$HOME"
+    }, form.dig("attributes", "sh_workspace"))
+    assert_includes form.dig("attributes", "sh_preexec", "label"), "Advanced"
+    assert_includes form.dig("attributes", "sh_preexec", "help"), "execute as the user"
   end
 end
