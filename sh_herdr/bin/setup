@@ -33,6 +33,9 @@ if [[ ! -x $herdr_bin ]]; then
   exit 1
 fi
 
+printf 'Herdr version:\n'
+"$herdr_bin" --version
+
 attach_target="$install_root/bin/sherlock-herdr-attach"
 runtime_target="$install_root/libexec/sherlock-herdr/runtime.sh"
 mkdir -p "$(dirname "$attach_target")" "$(dirname "$runtime_target")"
@@ -48,8 +51,6 @@ temporary_attach=
 mv -f "$temporary_runtime" "$runtime_target"
 temporary_runtime=
 
-printf 'Herdr version:\n'
-"$herdr_bin" --version
 printf '\nConfigure this SSH alias in ~/.ssh/config:\n'
 printf 'Host sherlock\n  HostName login.sherlock.stanford.edu\n  User %s\n' "${USER:-$(id -un)}"
 printf '\nInstall the local helper with:\n'

@@ -53,6 +53,9 @@ cat > "${SHERLOCK_HERDR_INSTALL_ROOT}/bin/herdr" <<'HERDR'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ ${1:-} == --version ]]; then
+  if [[ ${HERDR_VERSION_FAIL:-0} == 1 ]]; then
+    exit 7
+  fi
   printf 'herdr test 1.2.3\n'
 elif [[ ${1:-} == update ]]; then
   printf '%s\n' "$*" > "${CAPTURED_HERDR_ARGS:?}"
@@ -126,6 +129,24 @@ assert_file_contains "fresh setup verifies Herdr version" "$test_root/fresh.outp
 assert_file_contains "fresh setup downloads installer URL" "$CURL_LOG" "$SHERLOCK_HERDR_INSTALL_URL"
 assert_file_mode "fresh attachment helper mode" "$install_root/bin/sherlock-herdr-attach" 755
 assert_file_mode "fresh runtime library mode" "$install_root/libexec/sherlock-herdr/runtime.sh" 644
+
+# Version verification failure does not leave newly staged helper payloads.
+rm -f "$install_root/bin/sherlock-herdr-attach" "$install_root/libexec/sherlock-herdr/runtime.sh"
+export HERDR_VERSION_FAIL=1
+if "$app_root/bin/setup" > "$test_root/version-failure.output" 2>&1; then
+  printf 'FAIL: failed Herdr version exits nonzero\n' >&2
+  TEST_FAILURES=$((TEST_FAILURES + 1))
+else
+  printf 'PASS: failed Herdr version exits nonzero\n'
+fi
+if [[ ! -e $install_root/bin/sherlock-herdr-attach &&
+      ! -e $install_root/libexec/sherlock-herdr/runtime.sh ]]; then
+  printf 'PASS: failed Herdr version leaves no helper payload\n'
+else
+  printf 'FAIL: failed Herdr version leaves no helper payload\n' >&2
+  TEST_FAILURES=$((TEST_FAILURES + 1))
+fi
+unset HERDR_VERSION_FAIL
 
 # A failed download does not leave helper or runtime payloads behind.
 rm -f "$install_root/bin/herdr" "$install_root/bin/sherlock-herdr-attach" \
