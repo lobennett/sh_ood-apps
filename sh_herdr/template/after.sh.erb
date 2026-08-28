@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
-
 staging_dir=${herdr_staging_dir:-}
 if [[ $staging_dir != /* || ! -d $staging_dir ]]; then
   printf 'Batch Connect staging directory is missing or not absolute\n' >&2

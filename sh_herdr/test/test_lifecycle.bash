@@ -249,9 +249,9 @@ assert_success "readiness polled false then true" test "$(< "$test_root/status-$
 if [[ -f $staging_dir/herdr-ready ]]; then
   after_hook_continued="$test_root/after-hook-continued"
   assert_success "after hook finds exported staging marker from another directory" \
-    env herdr_staging_dir="$staging_dir" bash -c 'cd "$1"; source "$2"; touch "$3"' \
+    env herdr_staging_dir="$staging_dir" bash -c 'cd "$1"; unset port; source "$2"; printf "%s\n" "$port" > "$3"' \
       _ "$workspace_dir" "$after_script" "$after_hook_continued"
-  assert_success "sourced after hook returns control to Open OnDemand" test -f "$after_hook_continued"
+  assert_success "sourced after hook preserves Open OnDemand shell options" test -f "$after_hook_continued"
 else
   printf 'FAIL: after hook requires a staging readiness marker\n' >&2
   TEST_FAILURES=$((TEST_FAILURES + 1))
