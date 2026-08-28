@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+install_root=${SHERLOCK_HERDR_INSTALL_ROOT:-$HOME/.local}
+herdr_bin=${SHERLOCK_HERDR_BIN:-$install_root/bin/herdr}
+installer_url=${SHERLOCK_HERDR_INSTALL_URL:-https://herdr.dev/install.sh}
+
+download_dir=
+temporary_attach=
+temporary_runtime=
+cleanup() {
+  [[ -z $download_dir ]] || rm -rf -- "$download_dir"
+  [[ -z $temporary_attach ]] || rm -f -- "$temporary_attach"
+  [[ -z $temporary_runtime ]] || rm -f -- "$temporary_runtime"
+}
+trap cleanup EXIT
+
+if [[ -x $herdr_bin ]]; then
+  "$herdr_bin" update
+else
+  download_dir=$(mktemp -d "${TMPDIR:-/tmp}/sherlock-herdr-setup.XXXXXX")
+  installer="$download_dir/install.sh"
+  curl -fsSL "$installer_url" -o "$installer"
+  chmod 700 "$installer"
+  export SHERLOCK_HERDR_INSTALL_ROOT="$install_root"
+  bash "$installer"
+fi
+
+if [[ ! -x $herdr_bin ]]; then
+  printf 'Herdr was not installed at %s\n' "$herdr_bin" >&2
+  exit 1
+fi
+
+attach_target="$install_root/bin/sherlock-herdr-attach"
+runtime_target="$install_root/libexec/sherlock-herdr/runtime.sh"
+mkdir -p "$(dirname "$attach_target")" "$(dirname "$runtime_target")"
+
+temporary_attach=$(mktemp "$attach_target.XXXXXX")
+temporary_runtime=$(mktemp "$runtime_target.XXXXXX")
+cp "$script_dir/sherlock-herdr-attach" "$temporary_attach"
+cp "$script_dir/../lib/runtime.sh" "$temporary_runtime"
+chmod 755 "$temporary_attach"
+chmod 644 "$temporary_runtime"
+mv -f "$temporary_attach" "$attach_target"
+temporary_attach=
+mv -f "$temporary_runtime" "$runtime_target"
+temporary_runtime=
+
+printf 'Herdr version:\n'
+"$herdr_bin" --version
+printf '\nConfigure this SSH alias in ~/.ssh/config:\n'
+printf 'Host sherlock\n  HostName login.sherlock.stanford.edu\n  User %s\n' "${USER:-$(id -un)}"
+printf '\nInstall the local helper with:\n'
+printf 'scp sherlock:~/src/sh_ood-apps/sh_herdr/bin/sherlock-herdr ~/.local/bin/\n'
+printf 'chmod 755 ~/.local/bin/sherlock-herdr\n'
+printf '\nAttach with: sherlock-herdr <job-id>\n'
