@@ -149,6 +149,9 @@ class TemplateTest < Minitest::Test
     assert_includes job_script, "module load claude-code codex"
     assert_includes job_script, "HERDR_SESSION"
     assert_includes job_script, "HERDR_SOCKET_PATH"
+    assert_includes job_script, 'herdr_bin=${SHERLOCK_HERDR_BIN:-$HOME/.local/bin/herdr}'
+    assert_includes job_script, '[[ -x $herdr_bin ]]'
+    refute_includes job_script, "command -v herdr"
     refute_includes job_script, "--session"
     assert_includes job_script, "JSON.parse"
     assert_includes job_script, 'fetch("running") == true'

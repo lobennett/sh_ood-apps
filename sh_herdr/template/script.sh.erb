@@ -57,8 +57,9 @@ validate_job_id "$job_id" || {
 ready_marker="$staging_dir/herdr-ready"
 server_log="$staging_dir/herdr-server.log"
 
-command -v herdr >/dev/null || {
-  printf 'herdr is not available after module initialization\n' >&2
+herdr_bin=${SHERLOCK_HERDR_BIN:-$HOME/.local/bin/herdr}
+[[ -x $herdr_bin ]] || {
+  printf 'Herdr executable is unavailable: %s\n' "$herdr_bin" >&2
   exit 2
 }
 case <%= Shellwords.escape(context.herdr_agents.to_s) %> in
@@ -107,7 +108,7 @@ cleanup() {
   cleanup_started=1
   trap '' INT TERM
 
-  HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" herdr server stop >/dev/null 2>&1 || true
+  HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" server stop >/dev/null 2>&1 || true
   if [[ ${server_pid:-} =~ ^[0-9]+$ ]] && kill -0 "$server_pid" 2>/dev/null; then
     for _ in {1..20}; do
       kill -0 "$server_pid" 2>/dev/null || break
@@ -138,13 +139,13 @@ write_job_record "$job_id" "$session" "$socket" "${SLURMD_NODENAME:-$(hostname)}
 
 cd "$workspace"
 rm -f "$ready_marker"
-HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" herdr server >"$server_log" 2>&1 &
+HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" server >"$server_log" 2>&1 &
 server_pid=$!
 
 ready=0
 deadline=$((SECONDS + 120))
 while (( SECONDS < deadline )); do
-  status_json=$(HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" herdr status server --json 2>>"$server_log") || status_json=
+  status_json=$(HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" status server --json 2>>"$server_log") || status_json=
   if ruby -rjson -e 'status = JSON.parse(STDIN.read); exit(status.fetch("running") == true ? 0 : 1)' \
     <<< "$status_json" >/dev/null 2>&1; then
     ready=1
@@ -164,9 +165,9 @@ if (( ! ready )); then
   exit 1
 fi
 
-workspace_list=$(HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" herdr workspace list)
+workspace_list=$(HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" workspace list)
 if [[ $workspace_list != *workspace_id* ]]; then
-  HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" herdr workspace create \
+  HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" workspace create \
     --cwd "$workspace" --label "$(basename "$workspace")" --no-focus
 fi
 

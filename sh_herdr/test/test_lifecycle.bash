@@ -6,10 +6,12 @@ test_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 app_root=$(cd "$test_dir/.." && pwd)
 test_root=$(mktemp -d "${TMPDIR:-/tmp}/sherlock-herdr-lifecycle.XXXXXX")
 fake_bin="$test_root/bin"
+home_dir="$test_root/home"
+home_herdr_bin="$home_dir/.local/bin/herdr"
 staging_dir="$test_root/staging"
 workspace_dir="$test_root/workspace"
 state_root="$test_root/state"
-mkdir -p "$fake_bin" "$staging_dir" "$workspace_dir"
+mkdir -p "$fake_bin" "${home_herdr_bin%/*}" "$staging_dir" "$workspace_dir"
 
 runtime_dir_for_job() {
   printf '/tmp/sherlock-herdr-%s-%s\n' "$UID" "$1"
@@ -83,7 +85,7 @@ cat > "$fake_bin/codex" <<'EOF'
 exit 0
 EOF
 
-cat > "$fake_bin/herdr" <<'EOF'
+cat > "$home_herdr_bin" <<'EOF'
 #!/usr/bin/env bash
 set -u
 
@@ -135,7 +137,7 @@ case "${1:-}" in
     ;;
 esac
 EOF
-chmod +x "$fake_bin/module" "$fake_bin/squeue" "$fake_bin/claude" "$fake_bin/codex" "$fake_bin/herdr"
+chmod +x "$fake_bin/module" "$fake_bin/squeue" "$fake_bin/claude" "$fake_bin/codex" "$home_herdr_bin"
 
 wait_for_file() {
   local path=$1
@@ -150,17 +152,22 @@ wait_for_file() {
 }
 
 run_job() {
-  local before_script=$1 job_script=$2 job_id=$3 mode=$4 output=$5
+  local before_script=$1 job_script=$2 job_id=$3 mode=$4 output=$5 herdr_override=${6:-}
 
   (
     cd "$staging_dir"
     # shellcheck disable=SC1090
     source "$before_script"
-    export PATH="$fake_bin:/usr/bin:/bin" SHERLOCK_HERDR_STATE_ROOT="$state_root"
+    export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root"
     export SLURM_JOB_ID="$job_id" HERDR_READY_MODE="$mode"
     export MODULE_LOG="$test_root/module.log" HERDR_LOG="$test_root/herdr.log"
     export FAKE_SERVER_PID_FILE="$test_root/server-${job_id}.pid"
     export FAKE_STATUS_COUNT_FILE="$test_root/status-${job_id}.count"
+    if [[ -n $herdr_override ]]; then
+      export SHERLOCK_HERDR_BIN="$herdr_override"
+    else
+      unset SHERLOCK_HERDR_BIN
+    fi
     exec bash "$job_script"
   ) > "$output" 2>&1 &
   JOB_PID=$!
@@ -177,6 +184,7 @@ chmod +x "$before_script" "$job_script" "$after_script"
 assert_success "rendered before script parses" bash -n "$before_script"
 assert_success "rendered job script parses" bash -n "$job_script"
 assert_success "rendered after script parses" bash -n "$after_script"
+assert_failure "Herdr is absent from the lifecycle PATH" env PATH="$fake_bin:/usr/bin:/bin" command -v herdr
 
 job_id=$(( 700000 + $$ ))
 runtime_dir=$(runtime_dir_for_job "$job_id")
@@ -220,14 +228,22 @@ malformed_workspace="$test_root/malformed-workspace"
 mkdir -p "$malformed_staging" "$malformed_workspace"
 malformed_before="$test_root/malformed-before.sh"
 malformed_job="$test_root/malformed-job.sh"
+override_herdr_bin="$test_root/override-herdr"
+cat > "$override_herdr_bin" <<EOF
+#!/usr/bin/env bash
+printf '%s\\n' "\$*" >> "\${OVERRIDE_LOG:?}"
+exec "$home_herdr_bin" "\$@"
+EOF
+chmod +x "$override_herdr_bin"
 render_template "template/before.sh.erb" "$malformed_before" watson none "$malformed_workspace"
 render_template "template/script.sh.erb" "$malformed_job" watson none "$malformed_workspace"
 (
   cd "$malformed_staging"
   source "$malformed_before"
-  export PATH="$fake_bin:/usr/bin:/bin" SHERLOCK_HERDR_STATE_ROOT="$state_root"
+  export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root"
   export SLURM_JOB_ID="$((job_id + 1))" HERDR_READY_MODE=malformed
   export MODULE_LOG="$test_root/malformed-module.log" HERDR_LOG="$test_root/malformed-herdr.log"
+  export SHERLOCK_HERDR_BIN="$override_herdr_bin" OVERRIDE_LOG="$test_root/override-herdr.log"
   export FAKE_SERVER_PID_FILE="$test_root/server-malformed.pid"
   export FAKE_STATUS_COUNT_FILE="$test_root/status-malformed.count"
   exec bash "$malformed_job"
@@ -235,6 +251,7 @@ render_template "template/script.sh.erb" "$malformed_job" watson none "$malforme
 assert_failure "malformed readiness JSON fails lifecycle startup" test "$?" -eq 0
 assert_failure "malformed readiness does not create marker" test -e "$malformed_staging/herdr-ready"
 assert_success "malformed readiness reports staging server log" rg -q "fake server started" "$test_root/malformed-job.log"
+assert_success "override Herdr path handles lifecycle calls" rg -q "status server --json" "$test_root/override-herdr.log"
 
 missing_agent_before="$test_root/missing-agent-before.sh"
 missing_agent_job="$test_root/missing-agent-job.sh"
@@ -244,7 +261,7 @@ mv "$fake_bin/claude" "$fake_bin/claude.disabled"
 (
   cd "$staging_dir"
   source "$missing_agent_before"
-  export PATH="$fake_bin:/usr/bin:/bin" SHERLOCK_HERDR_STATE_ROOT="$state_root" SLURM_JOB_ID="$((job_id + 2))"
+  export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root" SLURM_JOB_ID="$((job_id + 2))"
   export MODULE_LOG="$test_root/missing-agent-module.log" HERDR_LOG="$test_root/missing-agent-herdr.log"
   export FAKE_SERVER_PID_FILE="$test_root/server-missing-agent.pid"
   export FAKE_STATUS_COUNT_FILE="$test_root/status-missing-agent.count"
@@ -265,7 +282,7 @@ assert_success "injection rendered job shell parses" bash -n "$injection_job"
 (
   cd "$staging_dir"
   source "$injection_before"
-  export PATH="$fake_bin:/usr/bin:/bin" SHERLOCK_HERDR_STATE_ROOT="$state_root" SLURM_JOB_ID="$((job_id + 3))"
+  export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root" SLURM_JOB_ID="$((job_id + 3))"
   export MODULE_LOG="$test_root/injection-module.log" HERDR_LOG="$test_root/injection-herdr.log"
   export FAKE_SERVER_PID_FILE="$test_root/server-injection.pid"
   export FAKE_STATUS_COUNT_FILE="$test_root/status-injection.count"
