@@ -134,7 +134,21 @@ trap 'status=$?; cleanup "$status"; exit "$status"' EXIT
 trap 'trap "" INT TERM; exit 130' INT
 trap 'trap "" INT TERM; exit 143' TERM
 
-acquire_session_lock "$session" "$job_id"
+if ! acquire_session_lock "$session" "$job_id"; then
+  session_lock=$(session_lock_path "$session") || {
+    printf 'Herdr session %s is busy\n' "$session" >&2
+    exit 1
+  }
+  if [[ -d $session_lock && ! -L $session_lock && -f $session_lock/owner_job && ! -L $session_lock/owner_job ]]; then
+    owner_job=$(< "$session_lock/owner_job")
+    if validate_job_id "$owner_job"; then
+      printf 'Herdr session %s is already owned by Slurm job %s\n' "$session" "$owner_job" >&2
+      exit 1
+    fi
+  fi
+  printf 'Herdr session %s is busy\n' "$session" >&2
+  exit 1
+fi
 write_job_record "$job_id" "$session" "$socket" "${SLURMD_NODENAME:-$(hostname)}"
 
 cd "$workspace"
@@ -146,7 +160,7 @@ ready=0
 deadline=$((SECONDS + 120))
 while (( SECONDS < deadline )); do
   status_json=$(HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" status server --json 2>>"$server_log") || status_json=
-  if [[ $status_json == *'"running":true,'* || $status_json == *'"running":true}'* ]]; then
+  if [[ $status_json == \{* && $status_json == *\} && ( $status_json == *'"running":true,'* || $status_json == *'"running":true}' ) ]]; then
     ready=1
     break
   fi

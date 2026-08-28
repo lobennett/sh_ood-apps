@@ -72,6 +72,16 @@ EOF
 
 cat > "$fake_bin/squeue" <<'EOF'
 #!/usr/bin/env bash
+job_id=
+while (( $# > 0 )); do
+  case $1 in
+    -j) job_id=$2; shift 2 ;;
+    *) shift ;;
+  esac
+done
+case ",${SQUEUE_ACTIVE_JOBS:-}," in
+  *",${job_id},"*) printf 'RUNNING\n' ;;
+esac
 exit 0
 EOF
 
@@ -132,6 +142,14 @@ case "${1:-}" in
         ;;
       malformed_true)
         printf '{"running":truegarbage}\n'
+        kill "$(< "$FAKE_SERVER_PID_FILE")" 2>/dev/null || true
+        ;;
+      leading_junk)
+        printf 'not-json{"running":true}\n'
+        kill "$(< "$FAKE_SERVER_PID_FILE")" 2>/dev/null || true
+        ;;
+      trailing_junk)
+        printf '{"running":true}not-json\n'
         kill "$(< "$FAKE_SERVER_PID_FILE")" 2>/dev/null || true
         ;;
       *) exit 2 ;;
@@ -196,6 +214,25 @@ assert_success "rendered before script parses" bash -n "$before_script"
 assert_success "rendered job script parses" bash -n "$job_script"
 assert_success "rendered after script parses" bash -n "$after_script"
 assert_failure "Herdr is absent from the lifecycle PATH" env PATH="$fake_bin:/usr/bin:/bin" command -v herdr
+
+duplicate_job_id=$(( 600000 + $$ ))
+mkdir -p "$state_root/sessions/sherlock"
+printf '424242\n' > "$state_root/sessions/sherlock/owner_job"
+(
+  cd "$staging_dir"
+  source "$before_script"
+  export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root"
+  export SLURM_JOB_ID="$duplicate_job_id" SQUEUE_ACTIVE_JOBS=424242 HERDR_READY_MODE=false_then_true
+  export MODULE_LOG="$test_root/duplicate-module.log" HERDR_LOG="$test_root/duplicate-herdr.log" RUBY_LOG="$test_root/duplicate-ruby.log"
+  export FAKE_SERVER_PID_FILE="$test_root/server-duplicate.pid"
+  export FAKE_STATUS_COUNT_FILE="$test_root/status-duplicate.count"
+  bash "$job_script"
+) > "$test_root/duplicate-job.log" 2>&1
+assert_failure "active duplicate session fails startup" test "$?" -eq 0
+assert_eq "active duplicate lock owner remains" 424242 "$(< "$state_root/sessions/sherlock/owner_job")"
+assert_success "active duplicate reports owner job" \
+  rg -q "Herdr session sherlock is already owned by Slurm job 424242" "$test_root/duplicate-job.log"
+rm -rf "$state_root/sessions/sherlock"
 
 job_id=$(( 700000 + $$ ))
 runtime_dir=$(runtime_dir_for_job "$job_id")
@@ -285,6 +322,35 @@ render_template "template/script.sh.erb" "$malformed_true_job" mycroft none "$ma
 assert_failure "malformed true readiness fails lifecycle startup" test "$?" -eq 0
 assert_failure "malformed true readiness does not create marker" test -e "$malformed_true_staging/herdr-ready"
 
+run_junk_readiness_case() {
+  local label=$1 mode=$2 session=$3 case_job_id=$4
+  local case_staging="$test_root/${label}-staging"
+  local case_workspace="$test_root/${label}-workspace"
+  local case_before="$test_root/${label}-before.sh"
+  local case_job="$test_root/${label}-job.sh"
+  local case_status
+
+  mkdir -p "$case_staging" "$case_workspace"
+  render_template "template/before.sh.erb" "$case_before" "$session" none "$case_workspace"
+  render_template "template/script.sh.erb" "$case_job" "$session" none "$case_workspace"
+  (
+    cd "$case_staging"
+    source "$case_before"
+    export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root"
+    export SLURM_JOB_ID="$case_job_id" HERDR_READY_MODE="$mode"
+    export MODULE_LOG="$test_root/${label}-module.log" HERDR_LOG="$test_root/${label}-herdr.log" RUBY_LOG="$test_root/${label}-ruby.log"
+    export FAKE_SERVER_PID_FILE="$test_root/server-${label}.pid"
+    export FAKE_STATUS_COUNT_FILE="$test_root/status-${label}.count"
+    exec bash "$case_job"
+  ) > "$test_root/${label}-job.log" 2>&1
+  case_status=$?
+  assert_failure "$label readiness fails lifecycle startup" test "$case_status" -eq 0
+  assert_failure "$label readiness does not create marker" test -e "$case_staging/herdr-ready"
+}
+
+run_junk_readiness_case leading-junk leading_junk gregson "$((job_id + 3))"
+run_junk_readiness_case trailing-junk trailing_junk moriarty "$((job_id + 4))"
+
 missing_agent_before="$test_root/missing-agent-before.sh"
 missing_agent_job="$test_root/missing-agent-job.sh"
 render_template "template/before.sh.erb" "$missing_agent_before" lestrade claude "$workspace_dir"
@@ -293,7 +359,7 @@ mv "$fake_bin/claude" "$fake_bin/claude.disabled"
 (
   cd "$staging_dir"
   source "$missing_agent_before"
-  export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root" SLURM_JOB_ID="$((job_id + 3))"
+  export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root" SLURM_JOB_ID="$((job_id + 5))"
   export MODULE_LOG="$test_root/missing-agent-module.log" HERDR_LOG="$test_root/missing-agent-herdr.log" RUBY_LOG="$test_root/missing-agent-ruby.log"
   export FAKE_SERVER_PID_FILE="$test_root/server-missing-agent.pid"
   export FAKE_STATUS_COUNT_FILE="$test_root/status-missing-agent.count"
@@ -314,7 +380,7 @@ assert_success "injection rendered job shell parses" bash -n "$injection_job"
 (
   cd "$staging_dir"
   source "$injection_before"
-  export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root" SLURM_JOB_ID="$((job_id + 4))"
+  export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root" SLURM_JOB_ID="$((job_id + 6))"
   export MODULE_LOG="$test_root/injection-module.log" HERDR_LOG="$test_root/injection-herdr.log" RUBY_LOG="$test_root/injection-ruby.log"
   export FAKE_SERVER_PID_FILE="$test_root/server-injection.pid"
   export FAKE_STATUS_COUNT_FILE="$test_root/status-injection.count"
