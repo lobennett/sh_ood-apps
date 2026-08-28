@@ -64,6 +64,7 @@ assert_eq "recorded host" sh03-01n01 "$actual_host"
 assert_eq "record mode" 600 "$(stat -f '%Lp' "$(job_record_path 12345)" 2>/dev/null || stat -c '%a' "$(job_record_path 12345)")"
 assert_eq "read job record" $'sherlock\t/tmp/sherlock-herdr-501-12345/herdr.sock\tsh03-01n01' "$(read_job_record 12345)"
 assert_failure "reject tab in socket record field" write_job_record 77777 sherlock $'/tmp/herdr.sock\tother' sh03-01n01
+assert_failure "reject mismatched socket path" write_job_record 77778 sherlock '/tmp/untrusted/herdr.sock' sh03-01n01
 
 assert_success "first lock claim" acquire_session_lock sherlock 12345
 assert_eq "first lock owner" 12345 "$(< "$(session_lock_path sherlock)/owner_job")"
@@ -75,6 +76,15 @@ assert_eq "active lock owner remains" 12345 "$(< "$(session_lock_path sherlock)/
 export SQUEUE_ACTIVE_JOBS=
 assert_success "stale owner reclamation" acquire_session_lock sherlock 54321
 assert_eq "reclaimed lock owner" 54321 "$(< "$(session_lock_path sherlock)/owner_job")"
+
+mkdir "$(session_lock_path missing-owner)"
+assert_failure "missing lock owner is busy" acquire_session_lock missing-owner 65432
+assert_success "missing-owner lock remains" test -d "$(session_lock_path missing-owner)"
+
+mkdir "$(session_lock_path malformed-owner)"
+printf 'not-a-job\n' > "$(session_lock_path malformed-owner)/owner_job"
+assert_failure "malformed lock owner is busy" acquire_session_lock malformed-owner 65432
+assert_success "malformed-owner lock remains" test -d "$(session_lock_path malformed-owner)"
 
 write_job_record 44444 wrong-owner '/tmp/sherlock-herdr-501-44444/herdr.sock' sh03-01n01
 assert_success "wrong-owner cleanup returns" release_job_state sherlock 44444

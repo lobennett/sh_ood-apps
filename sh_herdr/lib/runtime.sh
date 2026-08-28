@@ -53,10 +53,12 @@ write_job_record() {
   local session=${2:-}
   local socket=${3:-}
   local host=${4:-}
-  local root record temporary
+  local root record temporary expected_socket
 
   validate_job_id "$job_id" || return 1
   validate_session_name "$session" || return 1
+  expected_socket=$(expected_socket_path "$job_id") || return 1
+  [[ $socket == "$expected_socket" ]] || return 1
   [[ $socket != *$'\t'* && $socket != *$'\n'* ]] || return 1
   [[ $host != *$'\t'* && $host != *$'\n'* ]] || return 1
   ensure_state_root || return 1
