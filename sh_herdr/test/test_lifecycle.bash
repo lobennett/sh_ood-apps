@@ -116,11 +116,15 @@ printf '%s|%s|%s\n' "$HERDR_SESSION" "$HERDR_SOCKET_PATH" "$*" >> "${HERDR_LOG:?
 case "${1:-}" in
   server)
     if [[ ${2:-} == stop ]]; then
+      if [[ -f ${FAKE_SERVER_PID_FILE:?} ]]; then
+        kill "$(< "$FAKE_SERVER_PID_FILE")" 2>/dev/null || true
+      fi
       exit 0
     fi
+    printf '%s\n' "$$" > "${FAKE_SERVER_PID_FILE:?}"
     printf 'fake server started\n'
-    # Real Herdr starts a daemon and returns instead of remaining in the foreground.
-    exit 0
+    trap 'exit 0' TERM INT
+    while :; do sleep 0.1; done
     ;;
   status)
     count=0
@@ -137,15 +141,19 @@ case "${1:-}" in
         ;;
       malformed)
         printf '{malformed-json\n'
+        kill "$(< "$FAKE_SERVER_PID_FILE")" 2>/dev/null || true
         ;;
       malformed_true)
         printf '{"running":truegarbage}\n'
+        kill "$(< "$FAKE_SERVER_PID_FILE")" 2>/dev/null || true
         ;;
       leading_junk)
         printf 'not-json{"running":true}\n'
+        kill "$(< "$FAKE_SERVER_PID_FILE")" 2>/dev/null || true
         ;;
       trailing_junk)
         printf '{"running":true}not-json\n'
+        kill "$(< "$FAKE_SERVER_PID_FILE")" 2>/dev/null || true
         ;;
       *) exit 2 ;;
     esac
