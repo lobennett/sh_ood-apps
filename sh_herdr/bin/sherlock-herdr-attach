@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+job_id=${1:-}
+if [[ $# -ne 1 || ! $job_id =~ ^[0-9]+$ ]]; then
+  printf 'Usage: sherlock-herdr-attach JOB_ID\n' >&2
+  exit 2
+fi
+
+runtime_library=${SHERLOCK_HERDR_RUNTIME_LIBRARY:-$HOME/.local/libexec/sherlock-herdr/runtime.sh}
+if [[ ! -r $runtime_library ]]; then
+  printf 'runtime library is unavailable\n' >&2
+  exit 4
+fi
+# shellcheck source=/dev/null
+source "$runtime_library" || {
+  printf 'runtime library could not be loaded\n' >&2
+  exit 4
+}
+
+if ! squeue_output=$(squeue -h -j "$job_id" -o '%i|%u|%T' 2>/dev/null); then
+  printf 'could not query Slurm job %s\n' "$job_id" >&2
+  exit 3
+fi
+rows=()
+if [[ -n $squeue_output ]]; then
+  while IFS= read -r row; do rows[${#rows[@]}]=$row; done <<< "$squeue_output"
+fi
+if (( ${#rows[@]} != 1 )); then
+  printf 'Slurm job %s was not found or is ambiguous\n' "$job_id" >&2
+  exit 3
+fi
+
+IFS='|' read -r queued_job queued_owner queued_state extra <<< "${rows[0]}"
+if [[ -n ${extra:-} || $queued_job != "$job_id" || -z $queued_owner || -z $queued_state ]]; then
+  printf 'invalid Slurm record for job %s\n' "$job_id" >&2
+  exit 3
+fi
+if [[ $queued_owner != "$(id -un)" ]]; then
+  printf 'job %s belongs to another user\n' "$job_id" >&2
+  exit 3
+fi
+if [[ $queued_state != RUNNING ]]; then
+  printf 'job %s is not RUNNING (state: %s)\n' "$job_id" "$queued_state" >&2
+  exit 3
+fi
+
+record=$(read_job_record "$job_id" 2>/dev/null) || {
+  printf 'no Herdr registry record exists for job %s\n' "$job_id" >&2
+  exit 4
+}
+IFS=$'\t' read -r session socket host extra <<< "$record"
+if [[ -n ${extra:-} || -z $session || -z $socket || -z $host ]] || ! validate_session_name "$session"; then
+  printf 'invalid Herdr registry record for job %s\n' "$job_id" >&2
+  exit 4
+fi
+expected_socket="/tmp/sherlock-herdr-$(id -u)-${job_id}/herdr.sock"
+if [[ $socket != "$expected_socket" ]]; then
+  printf 'Herdr registry socket is invalid for job %s\n' "$job_id" >&2
+  exit 4
+fi
+
+herdr_bin=${SHERLOCK_HERDR_BIN:-$HOME/.local/bin/herdr}
+exec srun --jobid="$job_id" --overlap --nodes=1 --ntasks=1 --nodelist="$host" --pty \
+  env HERDR_SOCKET_PATH="$socket" "$herdr_bin" --session "$session"
