@@ -56,7 +56,7 @@ ssh sherlock true
 
 Authenticate `claude` and `codex` once in a normal Sherlock compute session,
 before launching agents from Herdr. For example, start a short interactive
-allocation, load the same modules used by the app, run each CLI, and complete
+allocation, load the same agent modules used by the app, run each CLI, and complete
 its interactive sign-in flow:
 
 ```bash
@@ -68,9 +68,9 @@ exit
 ```
 
 Exit each CLI after authentication. The CLIs keep their own configuration in
-your shared home directory; this app never places those credentials in the
-Open OnDemand session or its registry. Authenticate only the CLI(s) you plan
-to select in the form.
+your shared home directory; this app does not collect those credentials or
+write them to its registry. Authenticate only the CLI(s) you plan to select
+in the form.
 
 ## Start and attach
 
@@ -119,11 +119,11 @@ and supported native agent sessions from shared home storage. The selected
 workspace is used to create the initial workspace only when that named session
 has no workspace yet.
 
-Only one active allocation may own a name. A second job using the same name
-fails with the current owning job ID; choose a different name for concurrent
-allocations. A lock is reclaimed only after Slurm confirms that its recorded
-job has ended, so an apparently stale name should not be removed manually
-while its job may still be running.
+Only one active allocation may own a name. Startup fails when a second job
+uses the same active name; choose a different name for concurrent allocations.
+A lock is reclaimed only after Slurm confirms that its recorded job has ended,
+so an apparently stale name should not be removed manually while its job may
+still be running.
 
 ## State, logs, and troubleshooting
 
@@ -166,8 +166,8 @@ node. It does preserve the named session's durable data in home storage.
 
 - The app has no browser shell, open TCP port, reverse-proxy URL, or direct
   compute-node SSH path.
-- No password, API key, OAuth token, SSH secret, or Claude/Codex credential is
-  stored in Open OnDemand metadata or the Herdr registry.
+- The app does not collect passwords, API keys, OAuth tokens, SSH secrets, or
+  Claude/Codex credentials, and it does not write them to the Herdr registry.
 - The local wrapper supplies only a numeric job ID. The trusted Sherlock-side
   helper verifies job ownership and state before invoking `srun`.
 - Session names and paths are validated, state directories are private, and
