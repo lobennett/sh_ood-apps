@@ -33,5 +33,10 @@ based on https://github.com/OSC/bc_osc_codeserver
 OnDemand app for Matlab, using
 [matlab-proxy](https://github.com/mathworks/matlab-proxy)
 
+## `sh_herdr`
+
+Open OnDemand app for persistent [Herdr](https://herdr.dev) agent workspaces
+on Sherlock compute nodes. See [`sh_herdr/README.md`](sh_herdr/README.md) for
+setup, attachment, and troubleshooting instructions.
 
 
