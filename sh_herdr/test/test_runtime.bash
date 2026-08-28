@@ -5,22 +5,8 @@ set -u
 test_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 if [[ ${0##*/} == squeue ]]; then
-  job_id=
-  while (( $# > 0 )); do
-    case $1 in
-      -j)
-        job_id=$2
-        shift 2
-        ;;
-      *)
-        shift
-        ;;
-    esac
-  done
-
-  case ",${SQUEUE_ACTIVE_JOBS:-}," in
-    *",${job_id},"*) printf 'RUNNING\n' ;;
-  esac
+  [[ ${SQUEUE_FAIL:-0} == 0 ]] || exit 1
+  tr ',' '\n' <<< "${SQUEUE_ACTIVE_JOBS:-}" | sed '/^$/d'
   exit 0
 fi
 
@@ -76,6 +62,11 @@ assert_eq "active lock owner remains" 12345 "$(< "$(session_lock_path sherlock)/
 export SQUEUE_ACTIVE_JOBS=
 assert_success "stale owner reclamation" acquire_session_lock sherlock 54321
 assert_eq "reclaimed lock owner" 54321 "$(< "$(session_lock_path sherlock)/owner_job")"
+
+export SQUEUE_FAIL=1
+assert_failure "scheduler failure keeps lock busy" acquire_session_lock sherlock 65431
+assert_eq "scheduler failure preserves owner" 54321 "$(< "$(session_lock_path sherlock)/owner_job")"
+unset SQUEUE_FAIL
 
 mkdir "$(session_lock_path missing-owner)"
 assert_failure "missing lock owner is busy" acquire_session_lock missing-owner 65432

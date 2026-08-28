@@ -75,16 +75,7 @@ EOF
 
 cat > "$fake_bin/squeue" <<'EOF'
 #!/usr/bin/env bash
-job_id=
-while (( $# > 0 )); do
-  case $1 in
-    -j) job_id=$2; shift 2 ;;
-    *) shift ;;
-  esac
-done
-case ",${SQUEUE_ACTIVE_JOBS:-}," in
-  *",${job_id},"*) printf 'RUNNING\n' ;;
-esac
+tr ',' '\n' <<< "${SQUEUE_ACTIVE_JOBS:-}" | sed '/^$/d'
 exit 0
 EOF
 

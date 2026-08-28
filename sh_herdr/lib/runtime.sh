@@ -89,7 +89,7 @@ read_job_record() {
 acquire_session_lock() {
   local session=${1:-}
   local job_id=${2:-}
-  local root lock owner owner_state stale attempt
+  local root lock owner active_job_ids active_job_id owner_active stale attempt
 
   validate_session_name "$session" || return 1
   validate_job_id "$job_id" || return 1
@@ -111,8 +111,15 @@ acquire_session_lock() {
     [[ -d $lock && -f $lock/owner_job ]] || return 1
     owner=$(< "$lock/owner_job")
     validate_job_id "$owner" || return 1
-    owner_state=$(squeue -h -j "$owner" -o '%T' 2>/dev/null)
-    [[ -z $owner_state ]] || return 1
+    active_job_ids=$(squeue -h -u "${USER:-$(id -un)}" -o '%A' 2>/dev/null) || return 1
+    owner_active=0
+    while IFS= read -r active_job_id; do
+      if [[ $active_job_id == "$owner" ]]; then
+        owner_active=1
+        break
+      fi
+    done <<< "$active_job_ids"
+    (( owner_active == 0 )) || return 1
 
     stale="$root/sessions/.stale-${session}-${job_id}-${BASHPID:-$$}"
     [[ ! -e $stale && ! -L $stale ]] || return 1
