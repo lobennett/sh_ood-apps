@@ -130,6 +130,10 @@ case "${1:-}" in
         printf '{malformed-json\n'
         kill "$(< "$FAKE_SERVER_PID_FILE")" 2>/dev/null || true
         ;;
+      malformed_true)
+        printf '{"running":truegarbage}\n'
+        kill "$(< "$FAKE_SERVER_PID_FILE")" 2>/dev/null || true
+        ;;
       *) exit 2 ;;
     esac
     ;;
@@ -261,6 +265,26 @@ assert_failure "malformed readiness does not create marker" test -e "$malformed_
 assert_success "malformed readiness reports staging server log" rg -q "fake server started" "$test_root/malformed-job.log"
 assert_success "override Herdr path handles lifecycle calls" rg -q "status server --json" "$test_root/override-herdr.log"
 
+malformed_true_staging="$test_root/malformed-true-staging"
+malformed_true_workspace="$test_root/malformed-true-workspace"
+mkdir -p "$malformed_true_staging" "$malformed_true_workspace"
+malformed_true_before="$test_root/malformed-true-before.sh"
+malformed_true_job="$test_root/malformed-true-job.sh"
+render_template "template/before.sh.erb" "$malformed_true_before" mycroft none "$malformed_true_workspace"
+render_template "template/script.sh.erb" "$malformed_true_job" mycroft none "$malformed_true_workspace"
+(
+  cd "$malformed_true_staging"
+  source "$malformed_true_before"
+  export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root"
+  export SLURM_JOB_ID="$((job_id + 2))" HERDR_READY_MODE=malformed_true
+  export MODULE_LOG="$test_root/malformed-true-module.log" HERDR_LOG="$test_root/malformed-true-herdr.log" RUBY_LOG="$test_root/malformed-true-ruby.log"
+  export FAKE_SERVER_PID_FILE="$test_root/server-malformed-true.pid"
+  export FAKE_STATUS_COUNT_FILE="$test_root/status-malformed-true.count"
+  exec bash "$malformed_true_job"
+) > "$test_root/malformed-true-job.log" 2>&1
+assert_failure "malformed true readiness fails lifecycle startup" test "$?" -eq 0
+assert_failure "malformed true readiness does not create marker" test -e "$malformed_true_staging/herdr-ready"
+
 missing_agent_before="$test_root/missing-agent-before.sh"
 missing_agent_job="$test_root/missing-agent-job.sh"
 render_template "template/before.sh.erb" "$missing_agent_before" lestrade claude "$workspace_dir"
@@ -269,7 +293,7 @@ mv "$fake_bin/claude" "$fake_bin/claude.disabled"
 (
   cd "$staging_dir"
   source "$missing_agent_before"
-  export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root" SLURM_JOB_ID="$((job_id + 2))"
+  export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root" SLURM_JOB_ID="$((job_id + 3))"
   export MODULE_LOG="$test_root/missing-agent-module.log" HERDR_LOG="$test_root/missing-agent-herdr.log" RUBY_LOG="$test_root/missing-agent-ruby.log"
   export FAKE_SERVER_PID_FILE="$test_root/server-missing-agent.pid"
   export FAKE_STATUS_COUNT_FILE="$test_root/status-missing-agent.count"
@@ -290,7 +314,7 @@ assert_success "injection rendered job shell parses" bash -n "$injection_job"
 (
   cd "$staging_dir"
   source "$injection_before"
-  export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root" SLURM_JOB_ID="$((job_id + 3))"
+  export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root" SLURM_JOB_ID="$((job_id + 4))"
   export MODULE_LOG="$test_root/injection-module.log" HERDR_LOG="$test_root/injection-herdr.log" RUBY_LOG="$test_root/injection-ruby.log"
   export FAKE_SERVER_PID_FILE="$test_root/server-injection.pid"
   export FAKE_STATUS_COUNT_FILE="$test_root/status-injection.count"
