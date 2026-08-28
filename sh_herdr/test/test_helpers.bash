@@ -58,7 +58,12 @@ source "$HOME/.local/libexec/sherlock-herdr/runtime.sh"
 write_job_record 12345 sherlock '/tmp/sherlock-herdr-'"$UID"'-12345/herdr.sock' sh03-01n01
 export SQUEUE_OUTPUT="12345|$USER|RUNNING" SRUN_LOG="$test_root/srun.log"
 assert_success "remote attachment" "$app_root/bin/sherlock-herdr-attach" 12345
-assert_eq "srun arguments" '--jobid=12345 --overlap --nodes=1 --ntasks=1 --nodelist=sh03-01n01 --pty env HERDR_SOCKET_PATH=/tmp/sherlock-herdr-'"$UID"'-12345/herdr.sock '"$HOME/.local/bin/herdr"' --session sherlock' "$(<"$SRUN_LOG")"
+assert_eq "srun arguments" '--jobid=12345 --overlap --nodes=1 --ntasks=1 --nodelist=sh03-01n01 --pty env HERDR_SESSION=sherlock HERDR_SOCKET_PATH=/tmp/sherlock-herdr-'"$UID"'-12345/herdr.sock '"$HOME/.local/bin/herdr" "$(<"$SRUN_LOG")"
+if [[ $(<"$SRUN_LOG") == *'--session'* ]]; then
+  printf 'FAIL: srun vector contains deprecated --session flag\n' >&2; TEST_FAILURES=$((TEST_FAILURES + 1))
+else
+  printf 'PASS: srun vector omits deprecated --session flag\n'
+fi
 
 export SQUEUE_OUTPUT="12345|$USER|RUNNING|"; assert_exit_code "malformed Slurm row" 3 "$app_root/bin/sherlock-herdr-attach" 12345
 export SQUEUE_OUTPUT="12345|foreign|RUNNING"; assert_exit_code "foreign owner" 3 "$app_root/bin/sherlock-herdr-attach" 12345

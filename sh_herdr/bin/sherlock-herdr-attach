@@ -64,4 +64,4 @@ fi
 
 herdr_bin=${SHERLOCK_HERDR_BIN:-$HOME/.local/bin/herdr}
 exec srun --jobid="$job_id" --overlap --nodes=1 --ntasks=1 --nodelist="$host" --pty \
-  env HERDR_SOCKET_PATH="$socket" "$herdr_bin" --session "$session"
+  env HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin"
