@@ -7,8 +7,9 @@ login node and the existing allocation.
 
 Herdr state persists in the user's shared home directory, while its live Unix
 socket is kept in a private directory on the allocated compute node. The app
-does not provide a browser shell or a TCP service, and it does not copy or
-store agent credentials.
+does not provide a browser shell or a TCP service. It does not collect agent
+credentials or write them to its registry; do not paste credentials or other
+secrets into form fields.
 
 ## One-time setup
 
