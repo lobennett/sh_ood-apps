@@ -9,6 +9,6 @@ script:
     - "-N"
     - "1"
     - "-c"
-    - "<%= sh_cpus.blank? ? 8 : sh_cpus.to_i %>"
+    - "<%= sh_cpus.to_s.match?(/\A[1-9][0-9]*\z/) ? sh_cpus.to_i : 8 %>"
     - "--mem"
-    - "<%= sh_mem.blank? ? 32 : sh_mem.to_i %>G"
+    - "<%= sh_mem.to_s.match?(/\A[1-9][0-9]*\z/) ? sh_mem.to_i : 32 %>G"

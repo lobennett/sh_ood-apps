@@ -105,6 +105,20 @@ class TemplateTest < Minitest::Test
     assert_equal ["-N", "1", "-c", "8", "--mem", "32G"], defaults.dig("script", "native")
   end
 
+  def test_submit_template_rejects_non_positive_or_non_numeric_resources
+    %w[0 -1 sixteen].each do |invalid_cpu|
+      submit = YAML.safe_load(render("sh_herdr/submit.yml.erb", sh_cpus: invalid_cpu, sh_mem: "48"))
+      assert_equal ["-N", "1", "-c", "8", "--mem", "48G"], submit.dig("script", "native"),
+                   "CPU #{invalid_cpu.inspect} must fall back to 8"
+    end
+
+    %w[0 -1 forty-eight].each do |invalid_mem|
+      submit = YAML.safe_load(render("sh_herdr/submit.yml.erb", sh_cpus: "12", sh_mem: invalid_mem))
+      assert_equal ["-N", "1", "-c", "12", "--mem", "32G"], submit.dig("script", "native"),
+                   "memory #{invalid_mem.inspect} must fall back to 32G"
+    end
+  end
+
   def test_manifest_identifies_the_batch_connect_app
     manifest = YAML.safe_load(File.read(File.join(APP_ROOT, "sh_herdr/manifest.yml")))
     assert_equal "Herdr", manifest.fetch("name")
