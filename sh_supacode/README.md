@@ -95,9 +95,10 @@ If the browser blocks the custom URL scheme or you registered a different
 alias/user/port, copy the card's terminal command instead. Run it in the
 desired **remote** Supacode terminal. It checks that the original job is
 running, belongs to you, and is assigned to the node where the terminal is
-running. It then loads the agent and extra modules in that terminal and
-launches the agent. Pending, ended, foreign, malformed, and wrong-node jobs
-are rejected.
+running. It then loads the agent and extra modules and starts the agent in an
+explicit Slurm step belonging to that job. Pending, ended, foreign, malformed,
+and wrong-node jobs are rejected. Each step can use the allocation's requested
+CPU count; parallel steps share the same allocation through `srun --overlap`.
 
 For parallel work, create worktrees in Supacode and run the same command in
 each worktree's terminal. The launcher preserves the current working
@@ -110,6 +111,10 @@ processes end, but saved repository files and agent-owned configuration
 remain. This app does not preserve processes across allocations or install
 zmx. Upstream Supacode session persistence requires zmx on the remote host;
 without it, do not assume an SSH disconnect preserves your terminal process.
+If you have several jobs on the same node, Sherlock may attach the SSH
+transport to another job. The agent step is explicitly bound to this app's
+job, but ending that other job can still disconnect the terminal and interrupt
+the agent. Reconnect using the active allocation's card in that case.
 
 A new allocation may use another node. Update the remote connection in
 Supacode using the new card, then use its new launch command. Never reuse an

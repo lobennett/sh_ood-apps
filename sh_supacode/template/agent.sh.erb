@@ -3,6 +3,9 @@ require "shellwords"
 agent = context.supacode_agent.to_s
 raise "Unsupported agent" unless %w[claude codex].include?(agent)
 modules = Shellwords.shellsplit(context.sh_modules.to_s)
+cpus = context.sh_cpus.to_s.strip
+cpus = "8" if cpus.empty?
+raise "CPU cores must be a positive integer" unless cpus.match?(/\A[1-9][0-9]*\z/)
 -%>
 #!/usr/bin/env bash
 set -euo pipefail
@@ -38,7 +41,11 @@ module load <%= modules.map { |name| Shellwords.escape(name) }.join(" ") %>
 <% end -%>
 agent=<%= Shellwords.escape(agent) %>
 command -v "$agent" >/dev/null 2>&1 || fail "$agent is unavailable after loading modules."
+command -v srun >/dev/null 2>&1 || fail 'srun is unavailable; a Slurm job step is required.'
 [[ $1 != --check ]] || exit 0
 
-# Supacode chose the current worktree; do not cd back to the original workspace.
-exec "$agent"
+# SSH can be adopted into a different same-user job on this node. Bind the
+# agent to this allocation explicitly, preserving Supacode's chosen worktree.
+exec srun --jobid="$expected_job" --overlap --nodes=1 --ntasks=1 \
+  --nodelist="$expected_host" --cpus-per-task=<%= cpus %> \
+  --chdir="$PWD" --export=ALL --pty "$agent"

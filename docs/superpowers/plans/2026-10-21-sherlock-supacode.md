@@ -1,6 +1,6 @@
 # Sherlock Supacode Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add an OnDemand allocation and agent launcher for Supacode on a Mac, and report the existing Herdr review separately.
 
@@ -32,11 +32,11 @@
 
 **Interfaces:** Connection params are `supacode_job_id`, `supacode_host`, `supacode_user`, `supacode_workspace`, `supacode_staging_dir`, `supacode_agent`. `bash -l STAGING/agent.sh JOB_ID` starts the selected agent from the current directory. `agent.sh --check` validates dependencies inside the allocation without running an agent.
 
-- [ ] Write behavior tests for rendered form/submission/view, launch rejection cases, dependency setup, current-directory preservation, lifecycle readiness/cancellation, and shell/HTML/URL injection boundaries.
-- [ ] Run `bash sh_supacode/test/run`; expect failure because the templates do not exist.
-- [ ] Implement the templates and launch flow; invalid values fail with actionable errors.
-- [ ] Run `bash sh_supacode/test/run`; expect all tests passing, including rendered Bash syntax checks.
-- [ ] Commit the implementation and its tests.
+- [x] Write behavior tests for rendered form/submission/view, launch rejection cases, dependency setup, current-directory preservation, lifecycle readiness/cancellation, and shell/HTML/URL injection boundaries.
+- [x] Run `bash sh_supacode/test/run`; expect failure because the templates do not exist.
+- [x] Implement the templates and launch flow; invalid values fail with actionable errors.
+- [x] Run `bash sh_supacode/test/run`; expect all tests passing, including rendered Bash syntax checks.
+- [x] Commit the implementation and its tests.
 
 ### Task 2: Setup documentation and independent review
 
@@ -44,8 +44,8 @@
 
 **Interfaces:** Documentation uses the actual connection fields and staged command from Task 1, plus verified upstream Supacode v0.11.5 behavior and live Sherlock module checks.
 
-- [ ] Document install/symlink steps, one-time SSH and login-shell Git prerequisites, remote registration, button/fallback behavior, auth ownership, worktree use, cancellation, and remaining live checks.
-- [ ] Record reproducible Herdr findings without modifying that app.
-- [ ] Run both app suites and `git diff --check`; report any skipped checks.
-- [ ] Have a fresh reviewer inspect the new app and tests. Resolve material findings with a failing regression test before the fix.
+- [x] Document install/symlink steps, one-time SSH and login-shell Git prerequisites, remote registration, button/fallback behavior, auth ownership, worktree use, cancellation, and remaining live checks.
+- [x] Record reproducible Herdr findings without modifying that app.
+- [x] Run both app suites and `git diff --check`; report any skipped checks.
+- [x] Have a fresh reviewer inspect the new app and tests. Resolve material findings with a failing regression test before the fix.
 - [ ] Commit and push the new feature branch and open a draft PR against the Herdr feature branch, leaving main and deployed Sherlock untouched.

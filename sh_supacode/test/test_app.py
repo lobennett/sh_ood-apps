@@ -33,9 +33,12 @@ class AppTest(unittest.TestCase):
         self.env = dict(os.environ, PATH=f"{self.bin}:{os.environ['PATH']}",
                         SLURM_JOB_ID="12345", SLURMD_NODENAME=NODE,
                         FAKE_NODE=NODE, FAKE_ROW=f"12345|{USER}|RUNNING|{NODE}",
-                        MODULE_LOG=str(self.root / "modules"), AGENT_LOG=str(self.root / "agent"))
+                        MODULE_LOG=str(self.root / "modules"), AGENT_LOG=str(self.root / "agent"),
+                        SRUN_LOG=str(self.root / "srun"))
         self.stub("hostname", 'printf "%s\\n" "$FAKE_NODE"')
         self.stub("squeue", '[[ ${SQUEUE_FAIL:-0} == 0 ]] || exit 1\nprintf "%s\\n" "$FAKE_ROW"')
+        self.stub("srun", 'printf "%s\\n" "$@" > "$SRUN_LOG"\n'
+                         'while [[ ${1:-} == --* ]]; do shift; done\nexec "$@"')
         for agent in ("claude", "codex"):
             self.stub(agent, f'printf "%s\\n" "{agent}" "$PWD" "$*" > "$AGENT_LOG"')
         startup = self.root / "bashenv"
@@ -104,6 +107,19 @@ class AppTest(unittest.TestCase):
                 self.assertIn("load system git", modules)
                 self.assertIn("claude-code" if agent == "claude" else "codex", modules)
                 self.assertIn("python/3.12", modules)
+
+    def test_launch_uses_original_allocation_even_from_another_job(self):
+        self.stage_app(sh_cpus="4")
+        self.stub("srun", 'printf "%s\\n" "$@" > "$SRUN_LOG"\nexit 23')
+        p = self.agent(SLURM_JOB_ID="99999", SLURM_CPUS_PER_TASK="1")
+        self.assertEqual(p.returncode, 23, p.stderr)
+        args = (self.root / "srun").read_text().splitlines()
+        for expected in ("--jobid=12345", "--overlap", "--nodes=1", "--ntasks=1",
+                         f"--nodelist={NODE}", "--cpus-per-task=4",
+                         f"--chdir={self.workspace}", "--export=ALL", "--pty"):
+            self.assertIn(expected, args)
+        self.assertEqual(args[-1], "claude")
+        self.assertFalse((self.root / "agent").exists())
 
     def test_check_only_loads_dependencies_without_starting_agent(self):
         self.stage_app()
