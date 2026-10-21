@@ -1,0 +1,63 @@
+cluster: sherlock
+
+form:
+  - supacode_agent
+  - sh_workspace
+  - bc_queue
+  - sh_cpus
+  - sh_mem
+  - bc_num_hours
+  - sh_modules
+  - bc_email_on_started
+
+attributes:
+  supacode_agent:
+    label: Agent
+    widget: select
+    required: true
+    value: claude
+    options:
+      - ["Claude Code", "claude"]
+      - ["Codex", "codex"]
+  sh_workspace:
+    label: Remote workspace
+    help: "Select a repository or folder to open in Supacode on your Mac."
+    required: true
+    data-filepicker: true
+    data-target-file-type: dirs
+    data-default-directory: '$HOME'
+    readonly: true
+    value: '$HOME'
+  bc_queue:
+    label: Partition
+    widget: select
+    required: true
+    value: russpold
+    options:
+      - ["russpold", "russpold"]
+      - ["normal", "normal"]
+  sh_cpus:
+    label: CPUs
+    widget: number_field
+    required: true
+    min: 1
+    value: 8
+  sh_mem:
+    label: "Memory (GB)"
+    widget: number_field
+    required: true
+    min: 1
+    value: 32
+  bc_num_hours:
+    label: "Runtime (hours)"
+    widget: number_field
+    required: true
+    min: 1
+    max: 168
+    value: 8
+  sh_modules:
+    label: "Additional modules (optional)"
+    help: "Modules loaded before the agent starts. Do not enter credentials here."
+  bc_email_on_started:
+    widget: check_box
+    label: Email me when the session starts

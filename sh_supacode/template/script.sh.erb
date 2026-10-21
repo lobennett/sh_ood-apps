@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+stage=${supacode_staging_dir:?Missing Batch Connect staging directory}
+[[ $stage == /* && -d $stage ]] || exit 1
+ready="$stage/supacode-ready"
+failed="$stage/supacode-failed"
+log="$stage/supacode-startup.log"
+umask 077
+rm -f -- "$ready" "$failed"
+sleeper=
+cleanup() {
+  rm -f -- "$ready"
+  if [[ -n $sleeper ]]; then
+    kill "$sleeper" 2>/dev/null || true
+    wait "$sleeper" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+trap 'exit 0' TERM INT
+
+if ! bash "$stage/agent.sh" --check > "$log" 2>&1; then
+  touch "$failed"
+  cat "$log" >&2
+  exit 1
+fi
+touch "$ready"
+printf 'Supacode allocation ready on %s; connect using the OnDemand session card.\n' "${supacode_host:?}"
+
+# Keep the finite OnDemand allocation available for user-opened SSH terminals.
+# Slurm owns its time limit and all processes; this does not restart agents.
+while :; do
+  sleep 3600 &
+  sleeper=$!
+  wait "$sleeper"
+done

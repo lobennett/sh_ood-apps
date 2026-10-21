@@ -1,0 +1,42 @@
+<%
+require "cgi"
+require "shellwords"
+h = ->(value) { ERB::Util.html_escape(value.to_s) }
+encode = ->(value) { CGI.escape(value.to_s).gsub("+", "%20") }
+workspace = supacode_workspace.to_s
+workspace = workspace.sub(%r{/+\z}, "") unless workspace == "/"
+worktree_id = "#{supacode_user}@#{supacode_host}#{workspace}"
+command = ["bash", "-l", File.join(supacode_staging_dir.to_s, "agent.sh"), supacode_job_id.to_s].shelljoin
+agent_label = supacode_agent.to_s == "codex" ? "Codex" : "Claude Code"
+launch_url = "supacode://worktree/#{encode.call(worktree_id)}/tab/new?input=#{encode.call(command)}"
+%>
+<h2>Supacode on Sherlock</h2>
+<p>Job <code><%= h.call(supacode_job_id) %></code> is ready. Supacode runs on your Mac; the agent runs on Sherlock.</p>
+
+<h3>Connect the remote workspace</h3>
+<p>In Supacode, choose <strong>Connect to Remote Host</strong> and enter these values. Leave Port blank.</p>
+<dl class="dl-horizontal">
+  <dt>Server</dt><dd><code><%= h.call(supacode_host) %></code></dd>
+  <dt>User</dt><dd><code><%= h.call(supacode_user) %></code></dd>
+  <dt>Path</dt><dd><code><%= h.call(workspace) %></code></dd>
+</dl>
+<p>After that workspace appears in Supacode, use this button. Allow Supacode to open and confirm the command if prompted.</p>
+<p><a class="btn btn-primary" href="<%= h.call(launch_url) %>">Launch <%= h.call(agent_label) %> in Supacode</a></p>
+<p>Alternatively, select any worktree in that remote repository and run this in its Supacode terminal:</p>
+<pre><code><%= h.call(command) %></code></pre>
+
+<details>
+  <summary>One-time Mac SSH setup</summary>
+  <p>Add the following to <code>~/.ssh/config</code> on your Mac, keeping any existing <code>Host sherlock</code> configuration:</p>
+  <pre><code>Host sherlock
+  HostName login.sherlock.stanford.edu
+  User <%= h.call(supacode_user) %>
+
+Host sh??-*n*
+  User <%= h.call(supacode_user) %>
+  ProxyJump sherlock</code></pre>
+  <p>Before adding the remote host, connect once in your Mac terminal to complete SSH authentication and host-key confirmation:</p>
+  <pre><code>ssh <%= h.call(Shellwords.escape("#{supacode_user}@#{supacode_host}")) %></code></pre>
+  <p>Remote Git must support worktrees. Load <code>system git</code> in your Sherlock login-shell profile; see the app README for the check. Authenticate the chosen agent on Sherlock before using it here.</p>
+</details>
+<p>Cancel this session in OnDemand when finished. Files persist, but processes end with the allocation. A later allocation may use a different node; update the remote connection with its new details.</p>

@@ -1,0 +1,27 @@
+<%
+%w[sh_cpus sh_mem bc_num_hours].each do |key|
+  value = public_send(key).to_s
+  raise "#{key} must be a positive integer" unless value.match?(/\A[1-9][0-9]*\z/)
+end
+raise "Runtime must be at most 168 hours" if bc_num_hours.to_i > 168
+raise "Unsupported partition" unless %w[russpold normal].include?(bc_queue.to_s)
+raise "Unsupported agent" unless %w[claude codex].include?(supacode_agent.to_s)
+%>
+batch_connect:
+  template: basic
+  conn_params:
+    - supacode_job_id
+    - supacode_host
+    - supacode_user
+    - supacode_workspace
+    - supacode_staging_dir
+    - supacode_agent
+
+script:
+  native:
+    - "-N"
+    - "1"
+    - "-c"
+    - "<%= sh_cpus.to_i %>"
+    - "--mem"
+    - "<%= sh_mem.to_i %>G"

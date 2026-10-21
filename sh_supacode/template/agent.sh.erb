@@ -1,0 +1,44 @@
+<%
+require "shellwords"
+agent = context.supacode_agent.to_s
+raise "Unsupported agent" unless %w[claude codex].include?(agent)
+modules = Shellwords.shellsplit(context.sh_modules.to_s)
+-%>
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() { printf '%s\n' "$*" >&2; exit 1; }
+stage=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+IFS= read -r expected_job < "$stage/supacode-job-id" || fail 'Missing Supacode job metadata.'
+IFS= read -r expected_host < "$stage/supacode-host" || fail 'Missing Supacode host metadata.'
+[[ $expected_job =~ ^[0-9]+$ ]] || fail 'Invalid Supacode job metadata.'
+[[ $expected_host =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && $expected_host != *-ln* ]] || fail 'Invalid compute node.'
+[[ $# == 1 ]] || fail 'Usage: bash -l agent.sh JOB_ID'
+[[ $(hostname -s) == "$expected_host" ]] || fail 'Open this command in the Supacode terminal on the allocated compute node.'
+
+if [[ $1 == --check ]]; then
+  [[ ${SLURM_JOB_ID:-} == "$expected_job" ]] || fail 'Dependency checks must run inside the original allocation.'
+else
+  [[ $1 == "$expected_job" ]] || fail 'This launcher belongs to a different Slurm job.'
+  row=$(squeue -h -j "$expected_job" -o '%i|%u|%T|%N') || fail 'Could not verify the Slurm job.'
+  [[ -n $row && $row != *$'\n'* && ${row//[^|]/} == '|||' ]] || fail 'Slurm job is missing or returned an invalid record.'
+  IFS='|' read -r queued_job queued_user queued_state queued_host <<< "$row"
+  [[ $queued_job == "$expected_job" && $queued_user == "$(id -un)" && $queued_state == RUNNING ]] ||
+    fail 'The Slurm job must be RUNNING and belong to you.'
+  [[ $queued_host == "$expected_host" ]] || fail 'Slurm job is assigned to a different node.'
+fi
+
+# An SSH terminal does not inherit the Batch Connect job's module environment.
+type module >/dev/null 2>&1 || fail 'The module command is unavailable. Run this launcher with bash -l.'
+module reset
+module load system git
+module load <%= agent == "claude" ? "claude-code" : "codex" %>
+<% unless modules.empty? -%>
+module load <%= modules.map { |name| Shellwords.escape(name) }.join(" ") %>
+<% end -%>
+agent=<%= Shellwords.escape(agent) %>
+command -v "$agent" >/dev/null 2>&1 || fail "$agent is unavailable after loading modules."
+[[ $1 != --check ]] || exit 0
+
+# Supacode chose the current worktree; do not cd back to the original workspace.
+exec "$agent"

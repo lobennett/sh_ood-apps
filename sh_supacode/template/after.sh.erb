@@ -1,0 +1,16 @@
+# This hook is sourced by Open OnDemand. Preserve its shell options.
+for _ in {1..60}; do
+  if [[ -f "$supacode_staging_dir/supacode-ready" ]]; then
+    break
+  fi
+  if [[ -f "$supacode_staging_dir/supacode-failed" ]]; then
+    cat "$supacode_staging_dir/supacode-startup.log" >&2
+    clean_up 1
+    break
+  fi
+  sleep 1
+done
+if [[ ! -f "$supacode_staging_dir/supacode-ready" ]]; then
+  printf 'Supacode startup failed; see supacode-startup.log in the session output directory.\n' >&2
+  clean_up 1
+fi
