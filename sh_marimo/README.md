@@ -6,6 +6,28 @@ memory, and runtime; click **Launch**, then **Connect to marimo** when ready.
 Open an existing marimo `.py` notebook or create one in its file browser.
 The workspace is the initial browser directory, not a filesystem sandbox.
 
+## Live Sherlock verification
+
+Captured from the real Sherlock OnDemand session on **2026-10-21**. The notebook
+ran on compute node `sh04-18n31.int` in Slurm job **48889032**, returned **42**,
+and reconnected after saving and reloading. The browser used OnDemand's
+authenticated `/node/sh04-18n31.int/6885/` proxy.
+
+![Marimo running on Sherlock: saved notebook reconnects and displays job 48889032, host sh04-18n31.int, and cell result 42](docs/images/sherlock-marimo-notebook.jpg)
+
+<details>
+<summary>OnDemand session and sandbox app list</summary>
+
+The matching session appears in OnDemand with a **Connect to marimo** button.
+Herdr, Supacode, and marimo are all listed under **Interactive Apps [Sandbox]**.
+
+![Sherlock OnDemand showing the Marimo session and the three sandbox apps](docs/images/sherlock-marimo-ondemand.jpg)
+
+</details>
+
+These screenshots record a completed live check; the pictured allocation is
+temporary. Start a new session through OnDemand when it expires.
+
 ## Install once
 
 Sherlock's module catalog did not include marimo when checked on 2026-10-21.

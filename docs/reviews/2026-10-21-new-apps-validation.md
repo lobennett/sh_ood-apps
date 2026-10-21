@@ -2,7 +2,9 @@
 
 ## Installed locations
 
-- New app checkout: `~/src/sh_ood-apps-newapps`, branch `feature/sh-supacode`.
+- New app checkout: `~/src/sh_ood-apps-newapps`. The consolidated feature branch
+  is `feature/sherlock-ondemand-apps`, containing the existing Herdr app, the
+  Herdr review, Supacode, and Marimo. It replaces the stacked PR arrangement.
 - Sandbox links: `~/ondemand/dev/sh_marimo` and `~/ondemand/dev/sh_supacode`.
 - Marimo 0.25.2 environment: `$GROUP_HOME/logben/software/sherlock-marimo/venv`,
   linked from `~/.local/share/sherlock-marimo/venv`. Home was 94% full, so the
@@ -25,6 +27,7 @@
   in the new checkout, and reconnected after reload. The notebook is a personal
   acceptance artifact, not part of the Git branch. The session was left for
   the user and expires after its requested hour (about 17:46 PDT).
+  Real browser screenshots are embedded in [`sh_marimo/README.md`](../../sh_marimo/README.md#live-sherlock-verification).
 - Existing Herdr suites pass locally: four Bash suites plus 9 Ruby tests /
   120 assertions. ShellCheck was unavailable. See the separate Herdr review
   for defects and untested live behavior.
