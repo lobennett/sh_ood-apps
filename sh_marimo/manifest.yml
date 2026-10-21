@@ -1,0 +1,8 @@
+---
+name: marimo
+category: Interactive Apps
+subcategory: IDE
+role: batch_connect
+description: |
+  Launch an editable [marimo](https://marimo.io) notebook server on
+  [Sherlock](https://www.sherlock.stanford.edu), using your Python environment.

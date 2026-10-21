@@ -1,0 +1,10 @@
+# Sourced by Open OnDemand; leave its errexit/pipefail settings unchanged.
+echo "Waiting for marimo to open port ${port}..."
+if wait_until_port_used "${host}:${port}" 90; then
+  echo "Marimo is listening on port ${port}."
+else
+  echo 'Timed out waiting for marimo. Check output.log for Python environment or workspace errors.' >&2
+  pkill -P "${SCRIPT_PID}" || true
+  kill "${SCRIPT_PID}" || true
+  clean_up 1
+fi

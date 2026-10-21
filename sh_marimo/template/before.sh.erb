@@ -1,0 +1,34 @@
+# This file is sourced by Open OnDemand: preserve its shell options and umask.
+marimo_restore_xtrace=
+case $- in *x*) marimo_restore_xtrace=1; set +x ;; esac
+
+if [[ $(type -t module) == function ]]; then
+  export -f module
+fi
+
+if [[ ! ${host:-} =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]]; then
+  echo 'Invalid compute host for marimo.' >&2
+  exit 1
+fi
+port=$(find_port "$host") || exit 1
+if [[ ! $port =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
+  echo 'Unable to allocate a marimo server port.' >&2
+  exit 1
+fi
+password=$(create_passwd 32) || exit 1
+if (( ${#password} < 32 )); then
+  echo 'Unable to generate a marimo session password.' >&2
+  exit 1
+fi
+export host port password
+export marimo_staging_dir="$PWD"
+
+# Keep the password out of process arguments and server logs.
+export marimo_token_file="$marimo_staging_dir/marimo-auth/token"
+(
+  umask 077
+  mkdir -m 700 "$marimo_staging_dir/marimo-auth" &&
+    printf '%s' "$password" > "$marimo_token_file"
+) || exit 1
+
+if [[ -n $marimo_restore_xtrace ]]; then set -x; fi

@@ -1,0 +1,10 @@
+<%-
+  require 'cgi'
+  path_host = CGI.escape(host.to_s).gsub('+', '%20')
+  path_port = CGI.escape(port.to_s).gsub('+', '%20')
+  login_url = "/node/#{path_host}/#{path_port}/auth/login"
+-%>
+<form action="<%= CGI.escapeHTML(login_url) %>" method="post" target="_blank" rel="noopener noreferrer">
+  <input type="hidden" name="password" value="<%= CGI.escapeHTML(password.to_s) %>">
+  <button class="btn btn-primary" type="submit">Connect to marimo</button>
+</form>

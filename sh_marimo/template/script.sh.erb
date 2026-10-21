@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+<%- require 'shellwords' -%>
+# Open OnDemand runs this executable as a child, not as a sourced wrapper hook.
+set +x
+set -euo pipefail
+
+marimo_python=<%= Shellwords.escape(context.marimo_python.to_s) %>
+marimo_workspace=<%= Shellwords.escape(context.sh_workspace.to_s) %>
+marimo_modules=(<%= Shellwords.split(context.sh_modules.to_s).map { |name| Shellwords.escape(name) }.join(' ') %>)
+
+if type module >/dev/null 2>&1; then
+  module reset
+  if (( ${#marimo_modules[@]} )); then module load "${marimo_modules[@]}"; fi
+elif (( ${#marimo_modules[@]} )); then
+  echo 'The module command is unavailable; cannot load the requested modules.' >&2
+  exit 1
+fi
+
+# Expand only the documented home prefix, without evaluating shell input.
+case "$marimo_python" in
+  '$HOME/'*) marimo_python="$HOME/${marimo_python#\$HOME/}" ;;
+  '~/'*) marimo_python="$HOME/${marimo_python#\~/}" ;;
+esac
+case "$marimo_workspace" in
+  ''|'$HOME'|'~') marimo_workspace="$HOME" ;;
+  '$HOME/'*) marimo_workspace="$HOME/${marimo_workspace#\$HOME/}" ;;
+  '~/'*) marimo_workspace="$HOME/${marimo_workspace#\~/}" ;;
+esac
+
+if [[ $marimo_python != /* || ! -x $marimo_python || -d $marimo_python ]]; then
+  echo "Python executable is missing or not absolute: $marimo_python. See sh_marimo/README.md for setup." >&2
+  exit 1
+fi
+if [[ ! -d $marimo_workspace ]]; then
+  echo "Workspace does not exist: $marimo_workspace" >&2
+  exit 1
+fi
+if ! marimo_help=$("$marimo_python" -m marimo edit --help 2>&1); then
+  echo 'Install marimo in the selected Python environment before launching; see sh_marimo/README.md.' >&2
+  printf '%s\n' "$marimo_help" >&2
+  exit 1
+fi
+for marimo_option in --token-password-file --base-url --no-sandbox --skip-update-check; do
+  if [[ $marimo_help != *"$marimo_option"* ]]; then
+    echo "Installed marimo lacks $marimo_option. Upgrade the environment as described in sh_marimo/README.md." >&2
+    exit 1
+  fi
+done
+if [[ ! -s ${marimo_token_file:-} ]]; then
+  echo 'Missing marimo session password file.' >&2
+  exit 1
+fi
+
+cd -- "$marimo_workspace"
+# The browser connects over Sherlock's HTTPS proxy. Disable optional host APIs.
+export MARIMO_SESSION_COOKIE_SECURE=true MARIMO_ENABLE_HOST=false
+unset password
+exec "$marimo_python" -m marimo -q edit \
+  --headless --host 0.0.0.0 --port "$port" \
+  --base-url "/node/${host}/${port}" \
+  --token --token-password-file "$marimo_token_file" \
+  --no-sandbox --skip-update-check
