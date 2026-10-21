@@ -30,7 +30,11 @@ class AppTest(unittest.TestCase):
         self.workspace.mkdir()
         self.bin = self.root / "bin"
         self.bin.mkdir()
-        self.env = dict(os.environ, PATH=f"{self.bin}:{os.environ['PATH']}",
+        # Cluster shells export scheduler functions that can shadow PATH mocks.
+        # Keep all scheduler calls inside the controlled test boundary.
+        inherited = {key: value for key, value in os.environ.items()
+                     if not key.startswith("BASH_FUNC_")}
+        self.env = dict(inherited, PATH=f"{self.bin}:{os.environ['PATH']}",
                         SLURM_JOB_ID="12345", SLURMD_NODENAME=NODE,
                         FAKE_NODE=NODE, FAKE_ROW=f"12345|{USER}|RUNNING|{NODE}",
                         MODULE_LOG=str(self.root / "modules"), AGENT_LOG=str(self.root / "agent"),
