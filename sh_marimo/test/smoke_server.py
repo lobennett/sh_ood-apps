@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Exercise rendered OOD hooks against the marimo installed in this Python."""
+import argparse
 import html
 import http.client
 import json
@@ -36,6 +37,9 @@ def render(name, values):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--modules', default='', help='Modules required by the selected Python runtime')
+    args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='marimo-real-') as temp:
         # macOS /var aliases /private/var; use the server's canonical cwd path.
         staging = Path(temp).resolve()
@@ -50,7 +54,7 @@ def main():
             port = sock.getsockname()[1]
         password = secrets.token_hex(24)
         base = f'/node/localhost/{port}'
-        values = dict(marimo_python=sys.executable, sh_workspace=str(workspace), sh_modules='',
+        values = dict(marimo_python=sys.executable, sh_workspace=str(workspace), sh_modules=args.modules,
                       host='localhost', port=str(port), password=password)
         for name in ('before.sh.erb', 'script.sh.erb', 'after.sh.erb'):
             target = staging / name.removesuffix('.erb')
@@ -80,7 +84,9 @@ exec ./script.sh
                 conn.close()
                 return result
 
-            for _ in range(100):
+            # Match the app's readiness budget, including cold shared-storage imports.
+            deadline = time.monotonic() + 90
+            while time.monotonic() < deadline:
                 if process.poll() is not None:
                     raise AssertionError(log_path.read_text())
                 try:

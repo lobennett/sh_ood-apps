@@ -81,7 +81,9 @@ class MarimoTest < Minitest::Test
   end
 
   def run_before(dir, extra = '')
-    Open3.capture3({ 'RECORD' => File.join(dir, 'argv') }, 'bash', '-c', <<~BASH, chdir: dir)
+    # Lmod sets BASH_ENV on Sherlock; a child shell would replace our module
+    # boundary with the real cluster function unless the fixture clears it.
+    Open3.capture3({ 'RECORD' => File.join(dir, 'argv'), 'BASH_ENV' => nil }, 'bash', '-c', <<~BASH, chdir: dir)
       host=sh-01.int
       find_port() { printf '12345'; }
       create_passwd() { printf '%032d' 1; }

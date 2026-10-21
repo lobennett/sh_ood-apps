@@ -98,6 +98,8 @@ From the checkout root:
 ruby sh_marimo/test/test_app.rb
 # Requires marimo and its websockets dependency in the selected Python.
 "$HOME/.local/share/sherlock-marimo/venv/bin/python" sh_marimo/test/smoke_server.py
+# On Sherlock, include the modules required by that Python runtime:
+"$HOME/.local/share/sherlock-marimo/venv/bin/python" sh_marimo/test/smoke_server.py --modules 'devel python/3.12.1'
 ```
 
 The Ruby suite executes rendered lifecycle scripts and checks resource argument
