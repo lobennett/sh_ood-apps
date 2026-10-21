@@ -39,4 +39,16 @@ Open OnDemand app for persistent [Herdr](https://herdr.dev) agent workspaces
 on Sherlock compute nodes. See [`sh_herdr/README.md`](sh_herdr/README.md) for
 setup, attachment, and troubleshooting instructions.
 
+## `sh_supacode`
+
+Reserve a Sherlock compute allocation for [Supacode](https://supacode.sh/) on
+your Mac and launch Claude Code or Codex in a remote workspace. See
+[`sh_supacode/README.md`](sh_supacode/README.md) for SSH setup and usage.
+
+## `sh_marimo`
+
+Launch an editable [marimo](https://marimo.io/) notebook server in your browser
+through OnDemand, using a preinstalled Python environment. See
+[`sh_marimo/README.md`](sh_marimo/README.md) for installation and usage.
+
 
