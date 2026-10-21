@@ -48,4 +48,4 @@
 - [x] Record reproducible Herdr findings without modifying that app.
 - [x] Run both app suites and `git diff --check`; report any skipped checks.
 - [x] Have a fresh reviewer inspect the new app and tests. Resolve material findings with a failing regression test before the fix.
-- [ ] Commit and push the new feature branch and open a draft PR against the Herdr feature branch, leaving main and deployed Sherlock untouched.
+- [x] Commit and push the new feature branch and open a draft PR against the Herdr feature branch, leaving main and deployed Sherlock untouched.

@@ -17,8 +17,14 @@ at launch. This integration was tested with marimo **0.25.2**.
 # On Sherlock; choose a partition you can use.
 sdev -p russpold -c 2 --mem=4G -t 00:30:00
 module load devel python/3.12.1 uv/0.10.8
-uv venv --python "$(command -v python3)" "$HOME/.local/share/sherlock-marimo/venv"
-uv pip install --python "$HOME/.local/share/sherlock-marimo/venv/bin/python" 'marimo==0.25.2'
+# Keep packages in persistent personal group storage and caches in scratch.
+marimo_env="$GROUP_HOME/$USER/software/sherlock-marimo/venv"
+export UV_CACHE_DIR="$SCRATCH/.cache/uv-marimo"
+uv venv --python "$(command -v python3)" "$marimo_env"
+uv pip install --python "$marimo_env/bin/python" 'marimo==0.25.2'
+mkdir -p "$HOME/.local/share/sherlock-marimo"
+# Inspect any existing link/environment first; this command does not replace it.
+ln -s "$marimo_env" "$HOME/.local/share/sherlock-marimo/venv"
 "$HOME/.local/share/sherlock-marimo/venv/bin/python" -m marimo --version
 ```
 
@@ -53,6 +59,8 @@ preserve the executable bit on `template/script.sh.erb`.
   the allocation ends. Running kernels stop when the job ends or is deleted.
 - **Partition:** `russpold` or `normal`, subject to your access. Defaults are
   8 CPU cores, 32 GB, and 8 hours; optional GPUs and node constraints are available.
+  On OOD 3.0 the built-in partition field is a text input; enter another permitted
+  partition (such as `dev`) when appropriate.
 
 Jupyter `.ipynb` files need conversion to marimo notebooks; see the
 [upstream migration guide](https://docs.marimo.io/guides/coming_from/jupyter/).
