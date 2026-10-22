@@ -13,7 +13,7 @@ ran on compute node `sh04-18n31.int` in Slurm job **48889032**, returned **42**,
 and reconnected after saving and reloading. The browser used OnDemand's
 authenticated `/node/sh04-18n31.int/6885/` proxy.
 
-![Marimo running on Sherlock: saved notebook reconnects and displays job 48889032, host sh04-18n31.int, and cell result 42](docs/images/sherlock-marimo-notebook.jpg)
+![Marimo running on Sherlock: saved notebook reconnects and displays job 48889032, host sh04-18n31.int, and cell result 42](docs/images/sherlock-marimo-notebook.png)
 
 <details>
 <summary>OnDemand session and sandbox app list</summary>
