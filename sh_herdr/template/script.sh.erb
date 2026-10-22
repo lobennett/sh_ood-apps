@@ -1,0 +1,200 @@
+<%
+require "shellwords"
+
+session = context.herdr_session.to_s
+workspace = context.sh_workspace.to_s
+workspace = "$HOME" if workspace.blank?
+optional_modules = Shellwords.shellsplit(context.sh_modules.to_s)
+%>
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+module reset
+module load system git
+case <%= Shellwords.escape(context.herdr_agents.to_s) %> in
+  both) module load claude-code codex ;;
+  claude) module load claude-code ;;
+  codex) module load codex ;;
+  none) ;;
+  *) printf 'Invalid agent environment\n' >&2; exit 2 ;;
+esac
+<% unless optional_modules.empty? -%>
+module load <%= optional_modules.map { |name| Shellwords.escape(name) }.join(" ") %>
+<% end -%>
+<% unless context.sh_preexec.blank? -%>
+<%= context.sh_preexec %>
+<% end -%>
+
+runtime_library=${SHERLOCK_HERDR_RUNTIME_LIBRARY:-$HOME/.local/libexec/sherlock-herdr/runtime.sh}
+source "$runtime_library"
+
+session=<%= Shellwords.escape(session) %>
+workspace=<%= Shellwords.escape(workspace) %>
+job_id=${SLURM_JOB_ID:-}
+staging_dir=${herdr_staging_dir:-}
+
+if [[ $workspace == '$HOME' ]]; then
+  workspace=$HOME
+fi
+
+validate_session_name "$session" || {
+  printf 'Invalid Herdr session name\n' >&2
+  exit 2
+}
+validate_job_id "$job_id" || {
+  printf 'SLURM_JOB_ID must be numeric\n' >&2
+  exit 2
+}
+[[ -d $workspace ]] || {
+  printf 'Initial workspace is not a directory: %s\n' "$workspace" >&2
+  exit 2
+}
+[[ $staging_dir == /* && -d $staging_dir ]] || {
+  printf 'Batch Connect staging directory is missing or not absolute\n' >&2
+  exit 2
+}
+ready_marker="$staging_dir/herdr-ready"
+server_log="$staging_dir/herdr-server.log"
+
+herdr_bin=${SHERLOCK_HERDR_BIN:-$HOME/.local/bin/herdr}
+[[ -x $herdr_bin ]] || {
+  printf 'Herdr executable is unavailable: %s\n' "$herdr_bin" >&2
+  exit 2
+}
+case <%= Shellwords.escape(context.herdr_agents.to_s) %> in
+  both)
+    command -v claude >/dev/null || {
+      printf 'Claude command is unavailable after module initialization\n' >&2
+      exit 2
+    }
+    command -v codex >/dev/null || {
+      printf 'Codex command is unavailable after module initialization\n' >&2
+      exit 2
+    }
+    ;;
+  claude)
+    command -v claude >/dev/null || {
+      printf 'Claude command is unavailable after module initialization\n' >&2
+      exit 2
+    }
+    ;;
+  codex)
+    command -v codex >/dev/null || {
+      printf 'Codex command is unavailable after module initialization\n' >&2
+      exit 2
+    }
+    ;;
+  none) ;;
+esac
+
+runtime_dir=$(expected_runtime_dir "$job_id")
+socket=$(expected_socket_path "$job_id")
+if [[ -e $runtime_dir || -L $runtime_dir ]]; then
+  printf 'Runtime directory already exists: %s\n' "$runtime_dir" >&2
+  exit 1
+fi
+umask 077
+mkdir -m 700 "$runtime_dir"
+
+server_pid=
+cleanup_started=0
+cleanup() {
+  local original_status=${1:-0}
+
+  if (( cleanup_started )); then
+    return 0
+  fi
+  cleanup_started=1
+  trap '' INT TERM
+
+  HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" server stop >/dev/null 2>&1 || true
+  if [[ ${server_pid:-} =~ ^[0-9]+$ ]] && kill -0 "$server_pid" 2>/dev/null; then
+    for _ in {1..20}; do
+      kill -0 "$server_pid" 2>/dev/null || break
+      sleep 0.25
+    done
+    if kill -0 "$server_pid" 2>/dev/null; then
+      kill -TERM "$server_pid" 2>/dev/null || true
+    fi
+    for _ in {1..20}; do
+      kill -0 "$server_pid" 2>/dev/null || break
+      sleep 0.25
+    done
+    if kill -0 "$server_pid" 2>/dev/null; then
+      kill -KILL "$server_pid" 2>/dev/null || true
+    fi
+    wait "$server_pid" 2>/dev/null || true
+  fi
+  release_job_state "$session" "$job_id" || true
+  remove_runtime_dir "$job_id" "$runtime_dir" || true
+  return "$original_status"
+}
+trap 'status=$?; cleanup "$status"; exit "$status"' EXIT
+trap 'trap "" INT TERM; exit 130' INT
+trap 'trap "" INT TERM; exit 143' TERM
+
+if ! acquire_session_lock "$session" "$job_id"; then
+  session_lock=$(session_lock_path "$session") || {
+    printf 'Herdr session %s is busy\n' "$session" >&2
+    exit 1
+  }
+  if [[ -d $session_lock && ! -L $session_lock && -f $session_lock/owner_job && ! -L $session_lock/owner_job ]]; then
+    owner_job=$(< "$session_lock/owner_job")
+    if validate_job_id "$owner_job"; then
+      printf 'Herdr session %s is already owned by Slurm job %s\n' "$session" "$owner_job" >&2
+      exit 1
+    fi
+  fi
+  printf 'Herdr session %s is busy\n' "$session" >&2
+  exit 1
+fi
+write_job_record "$job_id" "$session" "$socket" "${SLURMD_NODENAME:-$(hostname)}"
+
+cd "$workspace"
+rm -f "$ready_marker"
+HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" server >"$server_log" 2>&1 &
+server_pid=$!
+
+ready=0
+deadline=$((SECONDS + 120))
+while (( SECONDS < deadline )); do
+  status_json=$(HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" status server --json 2>>"$server_log") || status_json=
+  if [[ $status_json == \{* && $status_json == *\} && ( $status_json == *'"running":true,'* || $status_json == *'"running":true}' ) ]]; then
+    ready=1
+    break
+  fi
+  if [[ ! ( $status_json == \{* && $status_json == *\} && ( $status_json == *'"running":false,'* || $status_json == *'"running":false}' ) ) ]]; then
+    printf 'Herdr returned an invalid readiness response.\n' >&2
+    cat "$server_log" >&2 || true
+    exit 1
+  fi
+  if ! kill -0 "$server_pid" 2>/dev/null; then
+    printf 'Herdr server exited before becoming ready.\n' >&2
+    cat "$server_log" >&2 || true
+    exit 1
+  fi
+  sleep 2
+done
+
+if (( ! ready )); then
+  printf 'Timed out waiting for Herdr server readiness.\n' >&2
+  cat "$server_log" >&2 || true
+  exit 1
+fi
+
+workspace_list=$(HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" workspace list)
+if [[ $workspace_list != *workspace_id* ]]; then
+  HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" workspace create \
+    --cwd "$workspace" --label "$(basename "$workspace")" --no-focus
+fi
+
+touch "$ready_marker"
+while sleep 5; do
+  status_json=$(HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" status server --json 2>>"$server_log") || status_json=
+  if [[ ! ( $status_json == \{* && $status_json == *\} && ( $status_json == *'"running":true,'* || $status_json == *'"running":true}' ) ) ]]; then
+    printf 'Herdr server stopped while the Slurm job was active.\n' >&2
+    cat "$server_log" >&2 || true
+    exit 1
+  fi
+done

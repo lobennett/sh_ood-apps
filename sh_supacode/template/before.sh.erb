@@ -1,0 +1,37 @@
+<%
+require "shellwords"
+workspace = context.sh_workspace.to_s
+workspace = "$HOME" if workspace.strip.empty?
+-%>
+# This hook is sourced by Open OnDemand. Preserve its shell options.
+supacode_prepare() {
+  local workspace
+  workspace=<%= Shellwords.escape(workspace) %>
+  [[ $workspace != '$HOME' ]] || workspace=$HOME
+  export supacode_job_id="${SLURM_JOB_ID:-}"
+  export supacode_agent=<%= Shellwords.escape(context.supacode_agent.to_s) %>
+  [[ $supacode_job_id =~ ^[0-9]+$ ]] || {
+    printf 'Supacode requires a Slurm job ID.\n' >&2
+    return 1
+  }
+  export supacode_host
+  supacode_host=$(hostname -s) || return 1
+  export supacode_user
+  supacode_user=$(id -un) || return 1
+  export supacode_staging_dir="$PWD"
+  export supacode_workspace
+  supacode_workspace=$(cd -- "$workspace" && pwd -P) || {
+    printf 'Workspace is not an accessible directory: %s\n' "$workspace" >&2
+    return 1
+  }
+  (
+    umask 077
+    printf '%s\n' "$supacode_job_id" > "$supacode_staging_dir/supacode-job-id" &&
+    printf '%s\n' "$supacode_host" > "$supacode_staging_dir/supacode-host"
+  ) || return 1
+  [[ $(type -t module) != function ]] || export -f module
+}
+if ! supacode_prepare; then
+  clean_up 1
+fi
+unset -f supacode_prepare

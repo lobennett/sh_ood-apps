@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+job_id=${1:-}
+if [[ $# -ne 1 || ! $job_id =~ ^[0-9]+$ ]]; then
+  printf 'Usage: sherlock-herdr JOB_ID\n' >&2
+  exit 2
+fi
+
+exec ssh -tt sherlock '~/.local/bin/sherlock-herdr-attach' "$job_id"

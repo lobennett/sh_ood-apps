@@ -1,0 +1,15 @@
+batch_connect:
+  template: basic
+  conn_params:
+    - herdr_session
+    - herdr_workspace
+    - herdr_job_id
+
+script:
+  native:
+    - "-N"
+    - "1"
+    - "-c"
+    - "<%= sh_cpus.to_s.match?(/\A[1-9][0-9]*\z/) ? sh_cpus.to_i : 8 %>"
+    - "--mem"
+    - "<%= sh_mem.to_s.match?(/\A[1-9][0-9]*\z/) ? sh_mem.to_i : 32 %>G"

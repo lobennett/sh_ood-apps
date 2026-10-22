@@ -1,0 +1,26 @@
+<h2>Herdr session</h2>
+
+<p>
+  Herdr session <code><%= ERB::Util.html_escape(herdr_session.to_s) %></code>
+  is running from <code><%= ERB::Util.html_escape(herdr_workspace.to_s) %></code>.
+</p>
+
+<h3>Attach from your laptop</h3>
+
+<p>Run this on your laptop, not in a Sherlock terminal:</p>
+
+<pre><code>sherlock-herdr <%= ERB::Util.html_escape(herdr_job_id.to_s) %></code></pre>
+
+<h3>One-time setup</h3>
+
+<p>On a Sherlock login node, install the remote components:</p>
+
+<pre><code>bash ~/src/sh_ood-apps/sh_herdr/bin/setup</code></pre>
+
+<p>On your laptop, install the local wrapper (the <code>sherlock</code> SSH host alias must be configured):</p>
+
+<pre><code>mkdir -p ~/.local/bin
+scp sherlock:~/src/sh_ood-apps/sh_herdr/bin/sherlock-herdr ~/.local/bin/
+chmod 755 ~/.local/bin/sherlock-herdr</code></pre>
+
+<p>Detach from Herdr when you are finished for now; the session remains available until the Slurm job ends.</p>

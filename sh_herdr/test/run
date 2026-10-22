@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+test_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+app_root=$(cd "$test_dir/.." && pwd)
+
+bash "$test_dir/test_runtime.bash"
+bash "$test_dir/test_helpers.bash"
+bash "$test_dir/test_setup.bash"
+ruby "$test_dir/test_templates.rb"
+bash "$test_dir/test_lifecycle.bash"
+
+if command -v shellcheck >/dev/null 2>&1; then
+  shell_files=()
+  while IFS= read -r -d '' file; do
+    case $file in
+      *.sh|*.bash)
+        shell_files+=("$file")
+        ;;
+      *)
+        IFS= read -r first_line < "$file" || first_line=
+        if [[ $first_line =~ ^#!.*(ba)?sh ]]; then
+          shell_files+=("$file")
+        fi
+        ;;
+    esac
+  done < <(find "$app_root/bin" "$app_root/lib" "$app_root/template" "$app_root/test" \
+    -type f ! -name '*.erb' -print0)
+
+  if (( ${#shell_files[@]} > 0 )); then
+    shellcheck "${shell_files[@]}"
+  fi
+else
+  printf 'SKIP: shellcheck not installed\n'
+fi

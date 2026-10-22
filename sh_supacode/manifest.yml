@@ -1,0 +1,8 @@
+---
+name: Supacode
+category: Interactive Apps
+subcategory: Development
+role: batch_connect
+description: |
+  Reserve a Sherlock compute session for Supacode on your Mac, then launch
+  Claude Code or Codex in a remote workspace. Requires Supacode with SSH support.

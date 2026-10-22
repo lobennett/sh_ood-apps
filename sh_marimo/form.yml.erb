@@ -1,0 +1,70 @@
+---
+cluster: sherlock
+form:
+  - marimo_python
+  - sh_workspace
+  - bc_queue
+  - sh_cpus
+  - sh_mem
+  - sh_gpus
+  - sh_features
+  - bc_num_hours
+  - sh_modules
+  - bc_email_on_started
+attributes:
+  marimo_python:
+    label: Python executable with marimo installed
+    required: true
+    value: '$HOME/.local/share/sherlock-marimo/venv/bin/python'
+    help: |
+      Install marimo once using the app README, then select that environment's
+      Python executable. Launching a job does not install packages.
+  sh_workspace:
+    label: Workspace
+    required: true
+    data-filepicker: true
+    data-target-file-type: dirs
+    data-default-directory: '$HOME'
+    readonly: true
+    value: '$HOME'
+    help: Choose the initial directory for marimo's notebook browser.
+  bc_queue:
+    label: Partition
+    widget: select
+    options:
+      - [russpold, russpold]
+      - [normal, normal]
+    value: russpold
+    required: true
+  sh_cpus:
+    label: CPU cores
+    widget: number_field
+    min: 1
+    value: 8
+    required: true
+  sh_mem:
+    label: Memory (GB)
+    widget: number_field
+    min: 1
+    value: 32
+    required: true
+  sh_gpus:
+    label: GPUs (optional)
+    widget: number_field
+    min: 1
+    max: 8
+    help: Request GPUs only on a partition that provides them; load CUDA if needed.
+  sh_features:
+    label: Additional node features (optional)
+  bc_num_hours:
+    label: Runtime (hours)
+    widget: number_field
+    min: 1
+    value: 8
+    required: true
+  sh_modules:
+    label: Additional modules (optional)
+    value: 'devel python/3.12.1'
+    help: |
+      Space-separated module names, including the Python module used to create
+      your environment when required. Shell commands are not evaluated.

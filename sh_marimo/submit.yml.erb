@@ -1,0 +1,17 @@
+<%-
+  require 'json'
+  positive = lambda do |value, fallback, label|
+    text = value.to_s.strip
+    text = fallback if text.empty?
+    raise ArgumentError, "#{label} must be a positive integer" unless text.match?(/\A[1-9][0-9]*\z/)
+    text
+  end
+  native = ['-N', '1', '-c', positive.call(sh_cpus, '8', 'CPU cores'),
+            '--mem', "#{positive.call(sh_mem, '32', 'Memory')}G"]
+  native += ['-G', positive.call(sh_gpus, '', 'GPUs')] unless sh_gpus.to_s.strip.empty?
+  native += ['--constraint', sh_features.to_s] unless sh_features.to_s.strip.empty?
+-%>
+batch_connect:
+  template: basic
+script:
+  native: <%= JSON.generate(native) %>
