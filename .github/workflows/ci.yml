@@ -1,0 +1,39 @@
+# Runs the repository's executable test suites on every push and pull request
+# so Open OnDemand app changes get real checks. The job needs only read access
+# to the repository: no secrets, no deployment, no Slurm or Herdr session.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Herdr suite greps its logs with ripgrep; Ruby and ShellCheck are
+      # already on the runner image.
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ripgrep
+
+      - name: Show tool versions
+        run: |
+          bash --version | head -n 1
+          ruby --version
+          shellcheck --version | sed -n '2p'
+          rg --version | head -n 1
+
+      - name: Root installer tests
+        run: bash test/run
+
+      - name: Agentic Engineering app tests
+        run: bash sh_agentic-engineering/test/run
+
+      - name: Herdr app tests
+        run: bash sh_herdr/test/run

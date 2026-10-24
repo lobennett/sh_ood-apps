@@ -87,4 +87,6 @@ page). The installer cannot perform that step; ask Sherlock support if the
 Develop menu is missing.
 
 Repository-level tests: `bash test/run`. Each app also has its own suite, for
-example `bash sh_agentic-engineering/test/run`.
+example `bash sh_agentic-engineering/test/run`. GitHub Actions
+(`.github/workflows/ci.yml`) runs the installer, Agentic Engineering, and Herdr
+suites on every push and pull request.
