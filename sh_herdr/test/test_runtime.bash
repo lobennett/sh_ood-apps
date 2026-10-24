@@ -42,13 +42,13 @@ assert_eq "expected runtime directory" "/tmp/sherlock-herdr-$UID-12345" "$(expec
 assert_eq "expected socket path" "/tmp/sherlock-herdr-$UID-12345/herdr.sock" "$(expected_socket_path 12345)"
 
 write_job_record 12345 sherlock \
-  '/tmp/sherlock-herdr-501-12345/herdr.sock' 'sh03-01n01'
+  "/tmp/sherlock-herdr-$UID-12345/herdr.sock" 'sh03-01n01'
 IFS=$'\t' read -r actual_session actual_socket actual_host < "$(job_record_path 12345)"
 assert_eq "recorded session" sherlock "$actual_session"
-assert_eq "recorded socket" '/tmp/sherlock-herdr-501-12345/herdr.sock' "$actual_socket"
+assert_eq "recorded socket" "/tmp/sherlock-herdr-$UID-12345/herdr.sock" "$actual_socket"
 assert_eq "recorded host" sh03-01n01 "$actual_host"
 assert_eq "record mode" 600 "$(file_mode "$(job_record_path 12345)")"
-assert_eq "read job record" $'sherlock\t/tmp/sherlock-herdr-501-12345/herdr.sock\tsh03-01n01' "$(read_job_record 12345)"
+assert_eq "read job record" "sherlock"$'\t'"/tmp/sherlock-herdr-$UID-12345/herdr.sock"$'\t'"sh03-01n01" "$(read_job_record 12345)"
 assert_failure "reject tab in socket record field" write_job_record 77777 sherlock $'/tmp/herdr.sock\tother' sh03-01n01
 assert_failure "reject mismatched socket path" write_job_record 77778 sherlock '/tmp/untrusted/herdr.sock' sh03-01n01
 
@@ -77,12 +77,12 @@ printf 'not-a-job\n' > "$(session_lock_path malformed-owner)/owner_job"
 assert_failure "malformed lock owner is busy" acquire_session_lock malformed-owner 65432
 assert_success "malformed-owner lock remains" test -d "$(session_lock_path malformed-owner)"
 
-write_job_record 44444 wrong-owner '/tmp/sherlock-herdr-501-44444/herdr.sock' sh03-01n01
+write_job_record 44444 wrong-owner "/tmp/sherlock-herdr-$UID-44444/herdr.sock" sh03-01n01
 assert_success "wrong-owner cleanup returns" release_job_state sherlock 44444
 assert_eq "wrong-owner lock remains" 54321 "$(< "$(session_lock_path sherlock)/owner_job")"
 assert_success "wrong-owner record remains" test -f "$(job_record_path 44444)"
 
-write_job_record 54321 sherlock '/tmp/sherlock-herdr-501-54321/herdr.sock' sh03-01n01
+write_job_record 54321 sherlock "/tmp/sherlock-herdr-$UID-54321/herdr.sock" sh03-01n01
 assert_success "owner cleanup" release_job_state sherlock 54321
 assert_failure "owner lock removed" test -e "$(session_lock_path sherlock)"
 assert_failure "owner record removed" test -e "$(job_record_path 54321)"
