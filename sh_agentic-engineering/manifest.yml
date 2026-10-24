@@ -1,0 +1,9 @@
+---
+name: Agentic Engineering
+category: Interactive Apps
+subcategory: Development
+role: batch_connect
+description: |
+  Launch a persistent Herdr session on a Sherlock compute node with the
+  [agentic-engineering](https://github.com/lobennett/agentic-engineering)
+  setup: Firstmate, your coding-agent harness, and the shared skills.

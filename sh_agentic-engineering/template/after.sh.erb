@@ -1,0 +1,18 @@
+# This hook is sourced by Open OnDemand. Preserve its shell options.
+for _ in {1..150}; do
+  if [[ -f "$ae_staging_dir/ae-ready" || -f "$ae_staging_dir/ae-failed" ]]; then
+    break
+  fi
+  sleep 1
+done
+if [[ -f "$ae_staging_dir/ae-ready" ]]; then
+  if [[ -f "$ae_staging_dir/ae-restored" ]]; then
+    # shellcheck disable=SC2034  # exported by before.sh; written to connection.yml
+    ae_restored=1
+  fi
+  echo "Agentic Engineering session is ready; attach through the OnDemand session card."
+else
+  printf 'Agentic Engineering startup failed; ae-startup.log follows.\n' >&2
+  cat "$ae_staging_dir/ae-startup.log" >&2 2>/dev/null || true
+  clean_up 1
+fi

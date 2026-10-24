@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Run the repository-level installer tests. Each app keeps its own suite
+# (for example bash sh_herdr/test/run).
+set -euo pipefail
+test_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+repo_root=$(cd "$test_dir/.." && pwd)
+
+bash "$test_dir/test_install_apps.bash"
+
+if command -v shellcheck >/dev/null 2>&1; then
+  shellcheck "$repo_root/install-apps.sh" "$test_dir/test_install_apps.bash"
+else
+  printf 'SKIP: shellcheck not installed\n'
+fi

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+<%-
+  require "shellwords"
+  session = context.ae_session.to_s.strip
+  unless session.match?(/\A[A-Za-z0-9][A-Za-z0-9._-]{0,63}\z/) && !%w[. ..].include?(session)
+    raise "Herdr session name is invalid"
+  end
+-%>
+# Attach a Herdr client to this job's session. Run it from a plain terminal on
+# a Sherlock login node or on the allocated compute node, for example the
+# OnDemand shell opened by the session card's host button.
+set -euo pipefail
+
+fail() { printf '%s\n' "$*" >&2; exit 1; }
+stage=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+IFS= read -r expected_job < "$stage/ae-job-id" || fail 'Missing session job metadata.'
+IFS= read -r expected_host < "$stage/ae-host" || fail 'Missing session host metadata.'
+IFS= read -r socket < "$stage/ae-socket" 2>/dev/null ||
+  fail 'The session has not finished starting: no Herdr socket is recorded yet.'
+[[ $expected_job =~ ^[0-9]+$ ]] || fail 'Invalid session job metadata.'
+[[ $expected_host =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || fail 'Invalid compute node metadata.'
+[[ $# == 1 ]] || fail "Usage: bash -l $stage/attach.sh JOB_ID"
+[[ $1 == "$expected_job" ]] || fail 'This attach command belongs to a different Slurm job.'
+[[ -z ${HERDR_ENV:-} ]] ||
+  fail 'Run this from a plain terminal, not inside a Herdr pane: nested Herdr clients are disabled.'
+
+runtime_root=${AGENTIC_ENGINEERING_RUNTIME_ROOT:-/tmp}
+[[ $socket == "$runtime_root/sherlock-agentic-engineering-$(id -u)-$expected_job/herdr.sock" ]] ||
+  fail 'The recorded Herdr socket path is invalid for this job.'
+herdr_bin=${AGENTIC_ENGINEERING_HERDR_BIN:-$HOME/.local/bin/herdr}
+[[ -x $herdr_bin ]] || fail "Herdr is not installed at $herdr_bin."
+
+row=$(squeue -h -j "$expected_job" -o '%i|%u|%T|%N') || fail 'Could not verify the Slurm job.'
+[[ -n $row && $row != *$'\n'* && ${row//[^|]/} == '|||' ]] ||
+  fail 'The Slurm job is missing or returned an invalid record.'
+IFS='|' read -r queued_job queued_user queued_state queued_host <<< "$row"
+[[ $queued_job == "$expected_job" && $queued_user == "$(id -un)" ]] ||
+  fail 'The Slurm job must belong to you.'
+[[ $queued_state == RUNNING ]] || fail "The Slurm job is not RUNNING (state: $queued_state)."
+[[ $queued_host == "$expected_host" ]] || fail 'The Slurm job is assigned to a different node.'
+
+session=<%= Shellwords.escape(session) %>
+if [[ ${SLURM_JOB_ID:-} == "$expected_job" && $(hostname -s) == "$expected_host" ]]; then
+  exec env HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" client
+fi
+command -v srun >/dev/null 2>&1 || fail 'srun is unavailable; run this on a Sherlock login or compute node.'
+# Bind the client to this allocation even when SSH adopted the shell into another job.
+exec srun --jobid="$expected_job" --overlap --nodes=1 --ntasks=1 --nodelist="$expected_host" --pty \
+  env HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" client

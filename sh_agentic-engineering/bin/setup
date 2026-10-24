@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# Install or update the public agentic-engineering setup for this user.
+#
+# Clones https://github.com/lobennett/agentic-engineering into a user-owned
+# checkout (or fast-forwards an existing one) and runs its documented
+# one-command entry point, setup.sh, with any arguments given here, for
+# example --check (report only) or --yes (no prompts). Everything stays under
+# $HOME; nothing needs sudo.
+set -euo pipefail
+
+repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)
+checkout=${AGENTIC_ENGINEERING_CHECKOUT:-$HOME/src/agentic-engineering}
+repo_url=${AGENTIC_ENGINEERING_REPO_URL:-https://github.com/lobennett/agentic-engineering.git}
+export AE_FIRSTMATE_DIR=${AE_FIRSTMATE_DIR:-$HOME/firstmate}
+export AE_BIN_DIR=${AE_BIN_DIR:-$HOME/.local/bin}
+
+usage() {
+  cat <<USAGE
+Usage: bash sh_agentic-engineering/bin/setup [setup.sh arguments...]
+
+Clones or fast-forwards $repo_url
+into $checkout
+and runs its setup.sh with the given arguments (for example --check to report
+without installing, or --yes to skip its confirmation prompts).
+
+Environment:
+  AGENTIC_ENGINEERING_CHECKOUT  checkout location (default: \$HOME/src/agentic-engineering)
+  AGENTIC_ENGINEERING_REPO_URL  repository to clone
+  AE_FIRSTMATE_DIR              Firstmate home used by setup.sh (default: \$HOME/firstmate)
+  AE_BIN_DIR                    Herdr install directory used by setup.sh (default: \$HOME/.local/bin)
+USAGE
+}
+
+fail() {
+  printf 'sh_agentic-engineering setup: %s\n' "$*" >&2
+  exit 1
+}
+
+normalize_url() {
+  local url=${1%/}
+  printf '%s\n' "${url%.git}"
+}
+
+case ${1:-} in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+esac
+
+command -v git >/dev/null 2>&1 || fail 'git is required; on Sherlock run: module load system git'
+
+if [[ -e $checkout || -L $checkout ]]; then
+  [[ -d $checkout/.git ]] ||
+    fail "$checkout exists but is not a Git checkout; move it aside or set AGENTIC_ENGINEERING_CHECKOUT."
+  origin=$(cd -- "$checkout" && git config --get remote.origin.url) ||
+    fail "Could not read the origin remote of $checkout."
+  [[ $(normalize_url "$origin") == "$(normalize_url "$repo_url")" ]] ||
+    fail "$checkout tracks $origin, not $repo_url; refusing to update it."
+  printf 'Updating %s\n' "$checkout"
+  (cd -- "$checkout" && git pull --ff-only) ||
+    fail "Could not fast-forward $checkout; resolve its local changes first."
+else
+  printf 'Cloning %s into %s\n' "$repo_url" "$checkout"
+  mkdir -p -- "$(dirname -- "$checkout")"
+  git clone -- "$repo_url" "$checkout" || fail "Could not clone $repo_url."
+fi
+
+entry="$checkout/setup.sh"
+[[ -f $entry ]] ||
+  fail "$entry is missing. The agentic-engineering README documents its one-command setup; check that the repository's default branch provides setup.sh."
+
+printf 'Running %s' "$entry"
+if (( $# > 0 )); then
+  printf ' %s' "$@"
+fi
+printf '\n'
+status=0
+bash "$entry" "$@" || status=$?
+if (( status != 0 )); then
+  printf 'sh_agentic-engineering setup: setup.sh exited with status %s\n' "$status" >&2
+  exit "$status"
+fi
+
+cat <<NEXT
+
+agentic-engineering setup finished.
+  Firstmate home: $AE_FIRSTMATE_DIR
+  Herdr:          $AE_BIN_DIR/herdr
+
+Next steps:
+  1. Sign in to the harness you will select, inside a normal compute session
+     (module load claude-code, codex, or pi-coding-agent; run it once; exit).
+  2. Register the OnDemand apps: bash $repo_root/install-apps.sh
+  3. In OnDemand, open Develop -> My Sandbox Apps -> Agentic Engineering.
+NEXT

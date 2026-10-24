@@ -1,0 +1,33 @@
+<%-
+  require "json"
+  positive = lambda do |value, label|
+    text = value.to_s.strip
+    raise ArgumentError, "#{label} must be a positive integer" unless text.match?(/\A[1-9][0-9]*\z/)
+    text
+  end
+  session = ae_session.to_s.strip
+  unless session.match?(/\A[A-Za-z0-9][A-Za-z0-9._-]{0,63}\z/) && !%w[. ..].include?(session)
+    raise ArgumentError, "Herdr session name may use letters, digits, '.', '_' and '-' (64 characters at most)"
+  end
+  raise ArgumentError, "Unsupported harness" unless %w[claude codex pi none].include?(ae_harness.to_s)
+  raise ArgumentError, "Unsupported partition" unless %w[russpold normal].include?(bc_queue.to_s)
+  cpus = positive.call(sh_cpus, "CPUs")
+  mem = positive.call(sh_mem, "Memory")
+  hours = positive.call(bc_num_hours, "Runtime")
+  raise ArgumentError, "Runtime must be at most 168 hours" if hours.to_i > 168
+-%>
+batch_connect:
+  template: basic
+  conn_params:
+    - ae_session
+    - ae_harness
+    - ae_home
+    - ae_job_id
+    - ae_host
+    - ae_user
+    - ae_staging_dir
+    - ae_restored
+script:
+  # Slurm job names identify the active owner of a Herdr session name.
+  job_name: <%= JSON.generate("sh_agentic-engineering/#{session}") %>
+  native: <%= JSON.generate(["-N", "1", "-c", cpus, "--mem", "#{mem}G"]) %>
