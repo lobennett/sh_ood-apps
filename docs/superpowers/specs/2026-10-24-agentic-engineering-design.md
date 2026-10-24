@@ -52,8 +52,8 @@ harnesses come from Sherlock's documented modules `claude-code`, `codex`, and
 and `sh_supacode` (the apps Sherlock does not already provide system-wide)
 from the checkout into `~/ondemand/dev`, the documented per-user development
 app directory. Repeated runs are no-ops; a real file or directory at a target
-path is never removed; a symlink pointing elsewhere is replaced only with
-`--force`; `--remove` deletes only links into this checkout. The script states
+path is never removed, and a symlink pointing elsewhere is reported rather
+than replaced. The script states
 the site-side prerequisite it cannot perform: the Sherlock team must enable app
 development for the account before the Develop menu appears.
 

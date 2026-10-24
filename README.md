@@ -75,10 +75,9 @@ bash ~/src/sh_ood-apps/install-apps.sh
 The script symlinks each app from the checkout into `~/ondemand/dev`, so
 `git pull` updates them in place. It is safe to rerun: existing links into the
 checkout are left as they are, a real file or directory at an app's path is
-never removed, and a symlink pointing elsewhere is replaced only with
-`--force`. Use `--app NAME` to pick apps, `--all` for every app in the
-checkout, `--remove` to unlink this checkout's apps, and `--dry-run` to
-preview. The apps then appear under **Develop → My Sandbox Apps**.
+never removed, and a symlink pointing elsewhere is left alone and reported so
+you can move it aside. The apps then appear under **Develop → My Sandbox
+Apps**.
 
 That menu is shown only after the Sherlock team has enabled app development
 for your account (a symlink under `/var/www/ood/apps/dev/<user>` described in
