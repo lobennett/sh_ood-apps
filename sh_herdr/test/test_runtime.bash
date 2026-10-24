@@ -30,7 +30,7 @@ source "$test_dir/assertions.bash"
 
 assert_eq "configured state root" "$test_root/state" "$(state_root)"
 assert_success "create private state root" ensure_state_root
-assert_eq "state root mode" 700 "$(stat -f '%Lp' "$(state_root)" 2>/dev/null || stat -c '%a' "$(state_root)")"
+assert_eq "state root mode" 700 "$(file_mode "$(state_root)")"
 assert_success "numeric job id" validate_job_id 12345
 assert_failure "reject job id suffix" validate_job_id '123;id'
 assert_success "safe session" validate_session_name sherlock.work-1
@@ -47,7 +47,7 @@ IFS=$'\t' read -r actual_session actual_socket actual_host < "$(job_record_path 
 assert_eq "recorded session" sherlock "$actual_session"
 assert_eq "recorded socket" '/tmp/sherlock-herdr-501-12345/herdr.sock' "$actual_socket"
 assert_eq "recorded host" sh03-01n01 "$actual_host"
-assert_eq "record mode" 600 "$(stat -f '%Lp' "$(job_record_path 12345)" 2>/dev/null || stat -c '%a' "$(job_record_path 12345)")"
+assert_eq "record mode" 600 "$(file_mode "$(job_record_path 12345)")"
 assert_eq "read job record" $'sherlock\t/tmp/sherlock-herdr-501-12345/herdr.sock\tsh03-01n01' "$(read_job_record 12345)"
 assert_failure "reject tab in socket record field" write_job_record 77777 sherlock $'/tmp/herdr.sock\tother' sh03-01n01
 assert_failure "reject mismatched socket path" write_job_record 77778 sherlock '/tmp/untrusted/herdr.sock' sh03-01n01

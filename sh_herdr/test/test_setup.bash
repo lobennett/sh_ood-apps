@@ -15,7 +15,7 @@ source "$test_dir/assertions.bash"
 
 assert_file_mode() {
   local description=$1 path=$2 expected=$3 actual
-  actual=$(stat -f '%Lp' "$path" 2>/dev/null || stat -c '%a' "$path" 2>/dev/null || true)
+  actual=$(file_mode "$path" 2>/dev/null || true)
   assert_eq "$description" "$expected" "$actual"
 }
 
