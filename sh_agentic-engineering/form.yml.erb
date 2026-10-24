@@ -1,0 +1,80 @@
+---
+cluster: sherlock
+form:
+  - ae_session
+  - ae_harness
+  - ae_home
+  - bc_queue
+  - sh_cpus
+  - sh_mem
+  - bc_num_hours
+  - sh_modules
+  - bc_email_on_started
+attributes:
+  ae_session:
+    label: Herdr session
+    required: true
+    value: agentic-engineering
+    help: |
+      Reuse a name to restore that session's saved layout. One active
+      allocation owns a name at a time; use another name for a concurrent session.
+      Letters, digits, `.`, `_`, and `-` only (64 characters at most).
+  ae_harness:
+    label: Primary harness
+    widget: select
+    required: true
+    value: claude
+    options:
+      - ["Claude Code (module claude-code)", "claude"]
+      - ["Codex (module codex)", "codex"]
+      - ["Pi (module pi-coding-agent)", "pi"]
+      - ["None (shell only)", "none"]
+    help: |
+      Started once in the Firstmate home when the session is new. Sign in to
+      the harness in a normal compute session first; never enter credentials here.
+  ae_home:
+    label: Firstmate home
+    required: true
+    data-filepicker: true
+    data-target-file-type: dirs
+    data-default-directory: '$HOME'
+    readonly: true
+    value: '$HOME/firstmate'
+    help: |
+      The Firstmate checkout installed by the agentic-engineering setup
+      (it must contain AGENTS.md). This is the initial Herdr workspace.
+  bc_queue:
+    label: Partition
+    widget: select
+    required: true
+    value: russpold
+    options:
+      - ["russpold", "russpold"]
+      - ["normal", "normal"]
+  sh_cpus:
+    label: CPUs
+    widget: number_field
+    required: true
+    min: 1
+    value: 8
+  sh_mem:
+    label: Memory (GB)
+    widget: number_field
+    required: true
+    min: 1
+    value: 32
+  bc_num_hours:
+    label: Runtime (hours)
+    widget: number_field
+    required: true
+    min: 1
+    max: 168
+    value: 8
+  sh_modules:
+    label: Additional modules (optional)
+    help: |
+      Space-separated module names loaded after `system git` and the harness
+      module. Names are quoted individually; shell commands are not evaluated.
+  bc_email_on_started:
+    widget: check_box
+    label: Email me when the session starts

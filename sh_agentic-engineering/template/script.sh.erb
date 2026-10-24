@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+<%-
+  require "shellwords"
+  harness = context.ae_harness.to_s
+  raise "Unsupported harness" unless %w[claude codex pi none].include?(harness)
+  harness_module = { "claude" => "claude-code", "codex" => "codex", "pi" => "pi-coding-agent" }[harness]
+  extra_modules = Shellwords.shellsplit(context.sh_modules.to_s)
+-%>
+# Open OnDemand runs this executable as a child of its batch wrapper.
+set -euo pipefail
+
+stage=${ae_staging_dir:?Missing Batch Connect staging directory}
+[[ $stage == /* && -d $stage ]] || exit 1
+ready="$stage/ae-ready"
+failed="$stage/ae-failed"
+restored="$stage/ae-restored"
+socket_record="$stage/ae-socket"
+log="$stage/ae-startup.log"
+server_log="$stage/herdr-server.log"
+umask 077
+rm -f -- "$ready" "$failed" "$restored" "$socket_record"
+exec >>"$log" 2>&1
+
+session=${ae_session:?}
+job_id=${ae_job_id:?}
+home=${ae_home:?}
+harness=<%= Shellwords.escape(harness) %>
+runtime_root=${AGENTIC_ENGINEERING_RUNTIME_ROOT:-/tmp}
+herdr_bin=${AGENTIC_ENGINEERING_HERDR_BIN:-$HOME/.local/bin/herdr}
+ready_timeout=${AGENTIC_ENGINEERING_READY_TIMEOUT:-120}
+setup_hint='Run setup.sh from https://github.com/lobennett/agentic-engineering; sh_agentic-engineering/README.md lists the Sherlock steps.'
+socket=
+
+fail() {
+  printf '%s\n' "$*" >&2
+  touch "$failed"
+  exit 1
+}
+herdr() {
+  HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" "$@"
+}
+server_running() {
+  local status_json
+  status_json=$(herdr status server --json 2>>"$server_log") || return 1
+  [[ $status_json == \{*\} ]] &&
+    [[ $status_json == *'"running":true,'* || $status_json == *'"running":true}'* ]]
+}
+
+[[ $job_id =~ ^[0-9]+$ ]] || fail 'SLURM_JOB_ID must be numeric.'
+[[ $session =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ && $session != . && $session != .. ]] ||
+  fail 'Herdr session name is invalid.'
+[[ -d $home ]] || fail "Firstmate home is not a directory: $home. $setup_hint"
+[[ -f $home/AGENTS.md ]] ||
+  fail "Firstmate home $home has no AGENTS.md, so it is not a Firstmate checkout. $setup_hint"
+
+type module >/dev/null 2>&1 || fail 'The module command is unavailable in this job.'
+module reset || fail 'module reset failed.'
+module load system git || fail 'Could not load the system and git modules.'
+<% if harness_module -%>
+module load <%= harness_module %> || fail 'Could not load the <%= harness_module %> module.'
+<% end -%>
+<% unless extra_modules.empty? -%>
+module load <%= extra_modules.map { |name| Shellwords.escape(name) }.join(" ") %> ||
+  fail 'Could not load the additional modules.'
+<% end -%>
+# User-owned tools from the agentic-engineering setup (Herdr, Firstmate helpers).
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
+
+[[ -x $herdr_bin ]] || fail "Herdr is not installed at $herdr_bin. $setup_hint"
+printf 'Herdr: %s\n' "$("$herdr_bin" --version 2>&1 || true)"
+if [[ $harness != none ]]; then
+  command -v "$harness" >/dev/null 2>&1 ||
+    fail "The $harness command is unavailable after module initialization."
+fi
+
+# Slurm is the authority on which allocation owns a session name: among this
+# user's active jobs carrying the same marker, the lowest job ID wins.
+marker="sh_agentic-engineering/$session"
+rows=$(squeue -h -u "$(id -un)" -o '%i|%T|%j') ||
+  fail 'Could not query Slurm for other Agentic Engineering sessions.'
+while IFS='|' read -r other_id other_state other_name; do
+  [[ $other_name == "$marker" && $other_id =~ ^[0-9]+$ && $other_id != "$job_id" ]] || continue
+  if (( other_id < job_id )); then
+    fail "Herdr session '$session' is already owned by your Slurm job $other_id ($other_state). Attach to that session or choose another session name."
+  fi
+done <<< "$rows"
+
+runtime_dir="$runtime_root/sherlock-agentic-engineering-$(id -u)-$job_id"
+socket="$runtime_dir/herdr.sock"
+[[ ! -e $runtime_dir && ! -L $runtime_dir ]] || fail "Runtime directory already exists: $runtime_dir"
+mkdir -m 700 -- "$runtime_dir" || fail "Could not create $runtime_dir"
+
+server_pid=
+sleeper=
+cleanup_started=0
+cleanup() {
+  local status=${1:-0} _
+  if (( cleanup_started )); then
+    return 0
+  fi
+  cleanup_started=1
+  trap '' INT TERM
+  rm -f -- "$ready"
+  if [[ -n $sleeper ]]; then
+    kill "$sleeper" 2>/dev/null || true
+  fi
+  if [[ -n $server_pid ]] && kill -0 "$server_pid" 2>/dev/null; then
+    herdr server stop >/dev/null 2>&1 || true
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+      kill -0 "$server_pid" 2>/dev/null || break
+      sleep 0.25
+    done
+    if kill -0 "$server_pid" 2>/dev/null; then
+      kill -TERM "$server_pid" 2>/dev/null || true
+    fi
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+      kill -0 "$server_pid" 2>/dev/null || break
+      sleep 0.25
+    done
+    if kill -0 "$server_pid" 2>/dev/null; then
+      kill -KILL "$server_pid" 2>/dev/null || true
+    fi
+    wait "$server_pid" 2>/dev/null || true
+  fi
+  if [[ $runtime_dir == "$runtime_root/sherlock-agentic-engineering-"* ]]; then
+    rm -rf -- "$runtime_dir"
+  fi
+  return "$status"
+}
+trap 'status=$?; cleanup "$status"; exit "$status"' EXIT
+trap 'trap "" INT TERM; exit 130' INT
+trap 'trap "" INT TERM; exit 143' TERM
+
+cd -- "$home" || fail "Could not enter $home"
+printf '%s\n' "$socket" > "$socket_record"
+HERDR_SESSION="$session" HERDR_SOCKET_PATH="$socket" "$herdr_bin" server >"$server_log" 2>&1 &
+server_pid=$!
+
+deadline=$((SECONDS + ready_timeout))
+until server_running; do
+  if ! kill -0 "$server_pid" 2>/dev/null; then
+    cat "$server_log" >&2 || true
+    fail 'Herdr server exited before becoming ready.'
+  fi
+  if (( SECONDS >= deadline )); then
+    cat "$server_log" >&2 || true
+    fail 'Timed out waiting for the Herdr server.'
+  fi
+  sleep 2
+done
+
+workspaces=$(herdr workspace list) || fail 'Could not list Herdr workspaces.'
+if [[ $workspaces == *workspace_id* ]]; then
+  touch "$restored"
+  printf 'Restored the saved layout of Herdr session %s; no new workspace or harness was started.\n' "$session"
+else
+  created=$(herdr workspace create --cwd "$home" --label "$(basename -- "$home")" --no-focus) ||
+    fail 'Could not create the Firstmate workspace.'
+  if [[ $harness != none ]]; then
+    [[ $created =~ \"root_pane\":[{][^}]*\"pane_id\":\"([^\"]+)\" ]] ||
+      fail 'Herdr did not report the pane of the new workspace.'
+    pane_id=${BASH_REMATCH[1]}
+    sleep 1
+    herdr pane run "$pane_id" "$harness" || fail "Could not start $harness in the Firstmate workspace."
+    printf 'Started %s in pane %s of %s.\n' "$harness" "$pane_id" "$home"
+  fi
+fi
+
+touch "$ready"
+printf 'Agentic Engineering session %s is ready in Slurm job %s.\n' "$session" "$job_id"
+
+# Hold the allocation while the server lives. The interruptible wait lets
+# Slurm's TERM reach the cleanup trap immediately.
+while :; do
+  sleep 5 &
+  sleeper=$!
+  wait "$sleeper" || true
+  sleeper=
+  if ! server_running; then
+    cat "$server_log" >&2 || true
+    printf 'Herdr server stopped while the Slurm job was active.\n' >&2
+    exit 1
+  fi
+done

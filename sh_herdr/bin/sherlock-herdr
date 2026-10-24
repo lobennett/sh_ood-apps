@@ -7,4 +7,6 @@ if [[ $# -ne 1 || ! $job_id =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
+# The remote shell expands ~ to the Sherlock home, not the laptop's.
+# shellcheck disable=SC2088
 exec ssh -tt sherlock '~/.local/bin/sherlock-herdr-attach' "$job_id"

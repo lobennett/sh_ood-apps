@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+test_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+app_root=$(cd "$test_dir/.." && pwd)
+
+ruby "$test_dir/test_app.rb"
+bash "$test_dir/test_setup.bash"
+
+if command -v shellcheck >/dev/null 2>&1; then
+  shellcheck "$app_root/bin/setup" "$test_dir/test_setup.bash"
+else
+  printf 'SKIP: shellcheck not installed\n'
+fi

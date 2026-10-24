@@ -178,7 +178,7 @@ run_job() {
   local before_script=$1 job_script=$2 job_id=$3 mode=$4 output=$5 herdr_override=${6:-}
 
   (
-    cd "$staging_dir"
+    cd "$staging_dir" || exit
     # shellcheck disable=SC1090
     source "$before_script"
     export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root"
@@ -216,7 +216,8 @@ duplicate_job_id=$(( 600000 + $$ ))
 mkdir -p "$state_root/sessions/sherlock"
 printf '424242\n' > "$state_root/sessions/sherlock/owner_job"
 (
-  cd "$staging_dir"
+  cd "$staging_dir" || exit
+  # shellcheck disable=SC1090
   source "$before_script"
   export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root"
   export SLURM_JOB_ID="$duplicate_job_id" SQUEUE_ACTIVE_JOBS=424242 HERDR_READY_MODE=false_then_true
@@ -287,7 +288,8 @@ chmod +x "$override_herdr_bin"
 render_template "template/before.sh.erb" "$malformed_before" watson none "$malformed_workspace"
 render_template "template/script.sh.erb" "$malformed_job" watson none "$malformed_workspace"
 (
-  cd "$malformed_staging"
+  cd "$malformed_staging" || exit
+  # shellcheck disable=SC1090
   source "$malformed_before"
   export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root"
   export SLURM_JOB_ID="$((job_id + 1))" HERDR_READY_MODE=malformed
@@ -310,7 +312,8 @@ malformed_true_job="$test_root/malformed-true-job.sh"
 render_template "template/before.sh.erb" "$malformed_true_before" mycroft none "$malformed_true_workspace"
 render_template "template/script.sh.erb" "$malformed_true_job" mycroft none "$malformed_true_workspace"
 (
-  cd "$malformed_true_staging"
+  cd "$malformed_true_staging" || exit
+  # shellcheck disable=SC1090
   source "$malformed_true_before"
   export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root"
   export SLURM_JOB_ID="$((job_id + 2))" HERDR_READY_MODE=malformed_true
@@ -334,7 +337,8 @@ run_junk_readiness_case() {
   render_template "template/before.sh.erb" "$case_before" "$session" none "$case_workspace"
   render_template "template/script.sh.erb" "$case_job" "$session" none "$case_workspace"
   (
-    cd "$case_staging"
+    cd "$case_staging" || exit
+    # shellcheck disable=SC1090
     source "$case_before"
     export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root"
     export SLURM_JOB_ID="$case_job_id" HERDR_READY_MODE="$mode"
@@ -357,7 +361,8 @@ render_template "template/before.sh.erb" "$missing_agent_before" lestrade claude
 render_template "template/script.sh.erb" "$missing_agent_job" lestrade claude "$workspace_dir"
 mv "$fake_bin/claude" "$fake_bin/claude.disabled"
 (
-  cd "$staging_dir"
+  cd "$staging_dir" || exit
+  # shellcheck disable=SC1090
   source "$missing_agent_before"
   export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root" SLURM_JOB_ID="$((job_id + 5))"
   export MODULE_LOG="$test_root/missing-agent-module.log" HERDR_LOG="$test_root/missing-agent-herdr.log" RUBY_LOG="$test_root/missing-agent-ruby.log"
@@ -378,7 +383,8 @@ render_template "template/script.sh.erb" "$injection_job" "safe; touch $canary" 
 assert_success "injection rendered lifecycle shell parses" bash -n "$injection_before"
 assert_success "injection rendered job shell parses" bash -n "$injection_job"
 (
-  cd "$staging_dir"
+  cd "$staging_dir" || exit
+  # shellcheck disable=SC1090
   source "$injection_before"
   export PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" SHERLOCK_HERDR_STATE_ROOT="$state_root" SLURM_JOB_ID="$((job_id + 6))"
   export MODULE_LOG="$test_root/injection-module.log" HERDR_LOG="$test_root/injection-herdr.log" RUBY_LOG="$test_root/injection-ruby.log"

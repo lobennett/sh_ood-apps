@@ -1,0 +1,51 @@
+<%-
+  require "shellwords"
+  session = context.ae_session.to_s.strip
+  unless session.match?(/\A[A-Za-z0-9][A-Za-z0-9._-]{0,63}\z/) && !%w[. ..].include?(session)
+    raise "Herdr session name is invalid"
+  end
+  harness = context.ae_harness.to_s
+  raise "Unsupported harness" unless %w[claude codex pi none].include?(harness)
+  home = context.ae_home.to_s.strip
+  home = "$HOME/firstmate" if home.empty?
+-%>
+# This hook is sourced by Open OnDemand. Preserve its shell options.
+ae_prepare() {
+  local home
+  home=<%= Shellwords.escape(home) %>
+  # Expand only the documented home prefix; shell input is never evaluated.
+  # shellcheck disable=SC2016,SC2088
+  case $home in
+    '$HOME'|'~') home=$HOME ;;
+    '$HOME/'*) home="$HOME/${home#\$HOME/}" ;;
+    '~/'*) home="$HOME/${home#\~/}" ;;
+  esac
+  export ae_session=<%= Shellwords.escape(session) %>
+  export ae_harness=<%= Shellwords.escape(harness) %>
+  export ae_job_id="${SLURM_JOB_ID:-}"
+  [[ $ae_job_id =~ ^[0-9]+$ ]] || {
+    printf 'Agentic Engineering requires a numeric Slurm job ID.\n' >&2
+    return 1
+  }
+  export ae_host
+  ae_host=${SLURMD_NODENAME:-$(hostname -s)} || return 1
+  export ae_user
+  ae_user=$(id -un) || return 1
+  export ae_staging_dir="$PWD"
+  export ae_restored=0
+  export ae_home
+  ae_home=$(cd -- "$home" 2>/dev/null && pwd -P) || {
+    printf 'Firstmate home is not an accessible directory: %s\n' "$home" >&2
+    return 1
+  }
+  (
+    umask 077
+    printf '%s\n' "$ae_job_id" > "$ae_staging_dir/ae-job-id" &&
+    printf '%s\n' "$ae_host" > "$ae_staging_dir/ae-host"
+  ) || return 1
+  [[ $(type -t module) != function ]] || export -f module
+}
+if ! ae_prepare; then
+  clean_up 1
+fi
+unset -f ae_prepare

@@ -188,4 +188,5 @@ bash sh_herdr/test/run
 ```
 
 The runner executes runtime, helper, setup, template, and lifecycle tests. It
-also runs ShellCheck when installed and otherwise prints one skip notice.
+also runs ShellCheck at warning severity when installed and otherwise prints
+one skip notice.

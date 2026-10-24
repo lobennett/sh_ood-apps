@@ -36,6 +36,10 @@ assert_eq() {
   fi
 }
 
+file_mode() {
+  stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"
+}
+
 finish_tests() {
   if (( TEST_FAILURES == 0 )); then
     printf 'All tests passed.\n'

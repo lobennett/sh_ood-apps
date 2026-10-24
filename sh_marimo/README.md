@@ -57,17 +57,11 @@ another existing environment with marimo installed. For example:
 uv pip install --python "$HOME/.local/share/sherlock-marimo/venv/bin/python" numpy pandas
 ```
 
-Register the app from this checkout, keeping `_common` alongside `sh_marimo`
-because the workspace picker uses its JavaScript:
-
-```bash
-mkdir -p "$HOME/ondemand/dev"
-ln -s "$HOME/src/sh_ood-apps/sh_marimo" "$HOME/ondemand/dev/sh_marimo"
-```
-
-Open Sherlock OnDemand's **Develop → My Sandbox Apps**, then **marimo**.
-If the link already exists, inspect it before changing it. The checkout must
-preserve the executable bit on `template/script.sh.erb`.
+Register the app with the repository installer; see
+[Installing the sandbox apps](../README.md#installing-the-sandbox-apps). Keep
+`_common` alongside `sh_marimo` because the workspace picker uses its
+JavaScript. Then open Sherlock OnDemand's **Develop → My Sandbox Apps**, then
+**marimo**.
 
 ## Session settings
 

@@ -1,0 +1,39 @@
+<%-
+  require "shellwords"
+  h = ->(value) { ERB::Util.html_escape(value.to_s) }
+  attach = ["bash", "-l", File.join(ae_staging_dir.to_s, "attach.sh"), ae_job_id.to_s].shelljoin
+  harness_label = { "claude" => "Claude Code", "codex" => "Codex", "pi" => "Pi" }[ae_harness.to_s]
+  restored = ae_restored.to_s == "1"
+-%>
+<h2>Agentic Engineering session</h2>
+<p>
+  Herdr session <code><%= h.call(ae_session) %></code> is running in Slurm job
+  <code><%= h.call(ae_job_id) %></code> on <code><%= h.call(ae_host) %></code>.
+  Its Firstmate home is <code><%= h.call(ae_home) %></code>.
+</p>
+<% if restored -%>
+<p>Herdr restored this session's saved layout. Supported agents resume on their own; otherwise start one in the Firstmate workspace after attaching.</p>
+<% elsif harness_label -%>
+<p><%= h.call(harness_label) %> was started in the Firstmate workspace. Firstmate takes over from there once you attach.</p>
+<% else -%>
+<p>No harness was started. After attaching, run <code>claude</code>, <code>codex</code>, or <code>pi</code> in the Firstmate workspace.</p>
+<% end -%>
+
+<h3>Attach</h3>
+<ol>
+  <li>Open a terminal as <code><%= h.call(ae_user) %></code>: click the host button (<code>&gt;_ <%= h.call(ae_host) %></code>) on this card for an OnDemand shell on the compute node, open <a href="/pun/sys/shell/ssh/default" target="_blank" rel="noopener noreferrer">Sherlock Shell Access</a> for a login-node shell, or run <code>ssh -t sherlock</code> from your laptop.</li>
+  <li>Run this command in that terminal (not inside another Herdr session):</li>
+</ol>
+<pre><code><%= h.call(attach) %></code></pre>
+<p>
+  Detach with <kbd>Ctrl-B</kbd> then <kbd>Q</kbd>; panes and agents keep running until the job ends.
+  Run the same command again to reattach. Delete this session in OnDemand when you are finished.
+</p>
+
+<details>
+  <summary>One-time setup</summary>
+  <p>On a Sherlock login node, install the agentic-engineering setup (Herdr, Firstmate, skills) into your home directory, then make sure the harness you selected is signed in:</p>
+  <pre><code>module load system git
+bash ~/src/sh_ood-apps/sh_agentic-engineering/bin/setup</code></pre>
+  <p>See <code>sh_agentic-engineering/README.md</code> for prerequisites, troubleshooting, and the session ownership rules.</p>
+</details>
