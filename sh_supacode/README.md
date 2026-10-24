@@ -13,17 +13,10 @@ server, or web server is installed by this app.
 ## Install the OnDemand app
 
 Keep the whole repository together: `form.js` links to the existing `_common`
-file picker. On Sherlock, from the checkout containing this app:
-
-```bash
-mkdir -p "$HOME/ondemand/dev"
-ln -s "$HOME/src/sh_ood-apps/sh_supacode" "$HOME/ondemand/dev/sh_supacode"
-```
-
-Adjust the checkout path if necessary. Do not replace an existing app link
-without checking where it points. The app appears in OnDemand's development
-apps. No separate helper installation is needed; OnDemand stages `agent.sh`
-with each job.
+file picker. Register the app with the repository installer; see
+[Installing the sandbox apps](../README.md#installing-the-sandbox-apps). The
+app appears in OnDemand's development apps. No separate helper installation is
+needed; OnDemand stages `agent.sh` with each job.
 
 ## One-time SSH and Git setup
 
